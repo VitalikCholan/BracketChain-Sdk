@@ -17,7 +17,20 @@ pnpm add @bracketchain/sdk
 | Build | tsup, CJS + ESM dual, types included |
 | Anchor | 0.32.1 (pinned, matches on-chain program build) |
 | Devnet program | `AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1` |
-| Subpaths | none yet — `./react` hooks subpath is V1 (reference hooks live in [`BracketChain-Frontend/hooks/`](../BracketChain-Frontend/hooks)) |
+| Subpaths | none yet — `./react` hooks subpath is V1 (reference hooks live in [`BracketChain-Frontend/hooks/`](https://github.com/btcthirst/BracketChain-Frontend/tree/main/hooks)) |
+
+---
+
+## Contents
+
+- [What's in the box](#whats-in-the-box) — two clients, 21 errors, 5 PDA helpers
+- [Quick start](#quick-start) — read-only, single-from-chain, write, subscribe
+- [Public surface](#public-surface) — every export, in tables
+- [Architecture notes](#architecture-notes) — orthogonal clients, MVP `subscribe`, IDL vendoring
+- [Build & develop](#build--develop)
+- [Repository layout](#repository-layout)
+- [Related repositories](#related-repositories)
+- [License](#license)
 
 ---
 
@@ -231,7 +244,6 @@ import {
   InvalidPayoutPresetError,
   InvalidTokenMintError,
   ProtocolNotInitializedError,
-  TournamentNameTakenError,
   AlreadyRegisteredError,
   UnauthorizedReporterError,
   InvalidMatchError,
@@ -356,13 +368,13 @@ pnpm sync-idl        # copy IDL + types from ../bracket-chain-programs/target
 
 | Repo | Purpose |
 |---|---|
-| [`bracketchain-main`](../bracketchain-main) | Top-level README, hackathon plan, MVP-vs-V1 deltas, demo script |
-| [`bracket-chain-programs`](../bracket-chain-programs) | The Anchor program — source of the vendored IDL |
-| [`bracket-chain-indexer`](../bracket-chain-indexer) | NestJS read API + Helius webhook ingestor — REST surface consumed by `BracketChainIndexerClient` |
-| [`BracketChain-Frontend`](../BracketChain-Frontend) | Next.js web app — primary consumer of this SDK |
+| [`BracketChain-Main`](https://github.com/VitalikCholan/BracketChain-Main) | Top-level README, hackathon plan, MVP-vs-V1 deltas, demo script |
+| [`BracketChain-Programs`](https://github.com/VitalikCholan/BracketChain-Programs) | The Anchor program — source of the vendored IDL |
+| [`BracketChain-Indexer`](https://github.com/VitalikCholan/BracketChain-Indexer) | NestJS read API + Helius webhook ingestor — REST surface consumed by `BracketChainIndexerClient` |
+| [`BracketChain-Frontend`](https://github.com/btcthirst/BracketChain-Frontend) | Next.js web app — primary consumer of this SDK |
 
 ---
 
 ## License
 
-MIT. See [`LICENSE`](./LICENSE).
+MIT. See [`LICENSE`](https://github.com/VitalikCholan/BracketChain-Sdk/blob/main/LICENSE).
