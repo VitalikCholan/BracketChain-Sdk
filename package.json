@@ -1,6 +1,6 @@
 {
   "name": "@bracketchain/sdk",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "TypeScript SDK for the BracketChain on-chain tournament protocol on Solana — PDA-escrowed USDC tournaments with auto prize distribution.",
   "license": "MIT",
   "repository": {
