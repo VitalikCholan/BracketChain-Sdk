@@ -34,7 +34,6 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
-    "sync-idl": "node scripts/sync-idl.mjs",
     "prepublishOnly": "pnpm build"
   },
   "devDependencies": {

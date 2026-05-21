@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Public surface of @bracketchain/sdk.
+// Public surface of @bracketchain/sdk (0.4.x — Kit + Codama edition).
 //
 // Anything not re-exported here is internal and may change without a major bump.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -8,114 +8,118 @@
 export { BracketChainClient } from "./client";
 export type { BracketChainClientOptions } from "./client";
 
-// PDA helpers
+// PDA helpers — Codama-generated for declared accounts, hand-written for match.
 export {
+  findMatchPda,
+  findParticipantPda,
   findProtocolConfigPda,
   findTournamentPda,
   findVaultPda,
-  findParticipantPda,
-  findMatchPda,
 } from "./pdas";
+export type { MatchSeeds } from "./pdas";
 
-// Types — account shapes, composite reads, enum helpers
+// Codama-generated PDA seed types (re-exported so callers can spell them out).
 export type {
-  Tournament,
-  Participant,
-  MatchNode,
-  ProtocolConfig,
-  TournamentWithAddress,
-  MatchNodeWithAddress,
-  ParticipantWithAddress,
-  TournamentState,
-  PayoutPresetKind,
-  TournamentStatusKind,
-  MatchStatusKind,
-  PayoutPresetVariant,
-  TournamentStatusVariant,
-  MatchStatusVariant,
-  PublicKey,
-} from "./types";
-export { getEnumKind, payoutPreset } from "./types";
+  ParticipantSeeds,
+  TournamentSeeds,
+  VaultSeeds,
+} from "./generated";
 
-// Re-export BN as a runtime value so SDK consumers can construct BN instances
-// (e.g. for entry-fee args, deadline, organizer-deposit) without installing
-// bn.js or @coral-xyz/anchor as a direct dependency. The type is already
-// re-exported above via `BN` in the type-only block.
-export { default as BN } from "bn.js";
+// Program address
+export { BRACKET_CHAIN_PROGRAM_ADDRESS } from "./generated";
+
+// Account + value types
+export type {
+  MatchInitDescriptor,
+  MatchNode,
+  MatchNodeWithAddress,
+  Participant,
+  ParticipantWithAddress,
+  PlacementPayout,
+  ProtocolConfig,
+  Tournament,
+  TournamentState,
+  TournamentWithAddress,
+  WithAddress,
+} from "./types";
+
+// Enums — exported as values so consumers can compare with `===`.
+export { MatchStatus, PayoutPreset, TournamentStatus } from "./types";
 
 // Methods — reads + mutations
 export {
-  getTournament,
-  getProtocolConfig,
-  listTournaments,
-  getAllMatches,
-  listParticipants,
-  getTournamentState,
   createTournament,
-  joinTournament,
   cancelTournament,
-  startTournament,
+  getAllMatches,
+  getMatch,
+  getParticipant,
+  getProtocolConfig,
+  getTournament,
+  getTournamentState,
+  joinTournament,
+  listParticipants,
+  listTournaments,
   reportResult,
+  startTournament,
   subscribe,
 } from "./methods";
 export type {
+  CancelTournamentParams,
+  CancelTournamentResult,
   CreateTournamentConfig,
   CreateTournamentResult,
   JoinTournamentParams,
   JoinTournamentResult,
-  CancelTournamentParams,
-  CancelTournamentResult,
-  StartTournamentParams,
-  StartTournamentResult,
   ReportResultParams,
   ReportResultResult,
+  StartTournamentParams,
+  StartTournamentResult,
   SubscribeOptions,
   SubscriptionError,
   TournamentSubscriptionEvent,
 } from "./methods";
 
-// Indexer client (Phase 5.1) — typed REST wrapper for the indexer service.
-// Composes orthogonally with BracketChainClient; Phase 5.3 will weave them
-// together via SWR for indexer-first reads with chain-side reconciliation.
+// Indexer client — typed REST wrapper for the indexer service.
+// Composes orthogonally with BracketChainClient.
 export { BracketChainIndexerClient } from "./api";
 export type {
-  IndexerClientOptions,
-  IndexerTournament,
-  IndexerPayout,
-  IndexerParticipant,
-  IndexerMatch,
-  IndexerTournamentStatus,
-  IndexerPayoutPreset,
-  IndexerPayoutKind,
-  IndexerMatchStatus,
-  ListTournamentsOptions,
-  GetPayoutsOptions,
-  GetParticipantsOptions,
   GetMatchesOptions,
+  GetParticipantsOptions,
+  GetPayoutsOptions,
+  IndexerClientOptions,
+  IndexerMatch,
+  IndexerMatchStatus,
+  IndexerParticipant,
+  IndexerPayout,
+  IndexerPayoutKind,
+  IndexerPayoutPreset,
+  IndexerTournament,
+  IndexerTournamentStatus,
+  ListTournamentsOptions,
 } from "./api";
 
 // Errors — base class + every typed subclass + the mapError helper
 export {
+  AlreadyRegisteredError,
   BracketChainSDKError,
+  InsufficientBalanceError,
   InsufficientFundsError,
+  InvalidMatchError,
   InvalidPayoutPresetError,
-  RegistrationClosedError,
-  NameTooLongError,
+  InvalidTokenMintError,
+  MatchAlreadyReportedError,
   MaxParticipantsExceededError,
   MinParticipantsNotMetError,
-  InvalidTokenMintError,
-  ProtocolNotInitializedError,
-  TournamentNameTakenError,
-  TournamentFullError,
-  AlreadyRegisteredError,
-  InsufficientBalanceError,
-  UnauthorizedReporterError,
-  InvalidMatchError,
-  MatchAlreadyReportedError,
-  TournamentNotActiveError,
+  NameTooLongError,
   NonParticipantWinnerError,
+  ProtocolNotInitializedError,
+  RegistrationClosedError,
+  TournamentFullError,
   TournamentInProgressError,
+  TournamentNameTakenError,
+  TournamentNotActiveError,
   TransactionFailedError,
+  UnauthorizedReporterError,
   UnknownProgramError,
   mapError,
 } from "./errors";
