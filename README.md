@@ -12,11 +12,12 @@ pnpm add @bracketchain/sdk
 
 | Field | Value |
 |---|---|
-| Version | [![npm](https://img.shields.io/npm/v/@bracketchain/sdk)](https://www.npmjs.com/package/@bracketchain/sdk) — `0.3.0` |
+| Version | [![npm](https://img.shields.io/npm/v/@bracketchain/sdk)](https://www.npmjs.com/package/@bracketchain/sdk) — `0.4.0` |
 | License | MIT |
 | Build | tsup, CJS + ESM dual, types included |
-| Anchor | 0.32.1 (pinned, matches on-chain program build) |
-| Devnet program | `AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1` |
+| Client base | [`@solana/kit`](https://www.npmjs.com/package/@solana/kit) 6.9 — no `@coral-xyz/anchor`, no `@solana/web3.js` v1 in the runtime |
+| Generated tree | [Codama](https://github.com/codama-idl/codama) — accounts, instructions, decoders, PDA finders |
+| Devnet program | `3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ` |
 | Subpaths | none yet — `./react` hooks subpath is V1 (reference hooks live in [`BracketChain-Frontend/hooks/`](../BracketChain-Frontend/hooks)) |
 
 ---
@@ -25,10 +26,10 @@ pnpm add @bracketchain/sdk
 
 Two orthogonal client classes — they share zero state and can be used independently:
 
-- **`BracketChainClient`** wraps Anchor for chain reads, transaction construction, and WebSocket subscriptions. Mutating methods require a connected wallet; query methods do not.
-- **`BracketChainIndexerClient`** is a typed `fetch` wrapper for the indexer's REST API — fast listings, cached reads, AbortSignal-aware. No Anchor dependency.
+- **`BracketChainClient`** wraps a Kit `Rpc` (+ optional `RpcSubscriptions`) for chain reads, transaction construction, and account-change subscriptions. Mutating methods require a `signer`; query methods do not.
+- **`BracketChainIndexerClient`** is a typed `fetch` wrapper for the indexer's REST API — fast listings, cached reads, AbortSignal-aware. Zero on-chain deps.
 
-Plus: 21 typed error classes with a `mapError` helper, 5 PDA helpers, runtime `BN` re-export, and account-subscription via `subscribe()`.
+Plus: 21 typed error classes with a `mapError` helper, 5 PDA helpers, numeric enums (`TournamentStatus`, `MatchStatus`, `PayoutPreset`), and account-subscription via `subscribe()`.
 
 ---
 
@@ -52,49 +53,51 @@ const tournaments = await indexer.listTournaments({
 // tournaments: IndexerTournament[]  (BigInt fields are decimal strings)
 ```
 
-### Read-only — single tournament from chain (no wallet)
+### Read-only — single tournament from chain (no signer)
 
 ```ts
-import { Connection, PublicKey } from "@solana/web3.js";
+import { address } from "@solana/kit";
 import { BracketChainClient, getTournamentState } from "@bracketchain/sdk";
 
 const client = new BracketChainClient({
-  connection: new Connection("https://api.devnet.solana.com", "confirmed"),
-  // wallet omitted — read-only
+  rpc: "https://api.devnet.solana.com",
+  // signer omitted — read-only
 });
 
-const pda = new PublicKey("...");
+const pda = address("...");
 const state = await getTournamentState(client, pda);
-// state.tournament, state.matches, state.participants
+// state.tournament, state.bracket, state.participants
 ```
 
-Mutating methods will throw if called without a wallet — `client.canSign === false`.
+Mutating methods throw if called without a `signer` — `client.canSign === false`.
 
 ### Writing — create a tournament
 
 ```ts
-import { BracketChainClient, createTournament, payoutPreset, BN } from "@bracketchain/sdk";
+import { address } from "@solana/kit";
+import { BracketChainClient, createTournament, PayoutPreset } from "@bracketchain/sdk";
 
 const client = new BracketChainClient({
-  connection,
-  wallet: anchorWallet,                  // from @solana/wallet-adapter-react useAnchorWallet()
+  rpc: "https://api.devnet.solana.com",
+  rpcSubscriptions: "wss://api.devnet.solana.com",
+  signer,                                 // TransactionSigner — see "Signer setup" below
   commitment: "confirmed",
 });
 
 const result = await createTournament(client, {
-  name: "Friday Night CS2",              // ≤ 32 bytes (UTF-8)
-  entryFee: new BN(1_000_000),           // 1 USDC (6 decimals)
+  name: "Friday Night CS2",               // ≤ 32 bytes (UTF-8)
+  entryFee: 1_000_000n,                   // 1 USDC (6 decimals) — bigint or number
   maxParticipants: 16,
-  payoutPreset: payoutPreset("standard"),  // "winnerTakesAll" | "standard" | "deep"
-  registrationDeadline: Math.floor(Date.now() / 1000) + 3600,  // unix seconds
-  organizerDeposit: new BN(0),           // optional top-up to prize pool
+  payoutPreset: PayoutPreset.Standard,    // numeric enum: WinnerTakesAll | Standard | Deep
+  registrationDeadline: BigInt(Math.floor(Date.now() / 1000) + 3600),
+  organizerDeposit: 0n,                   // optional top-up to prize pool
 });
 
-console.log(result.tournamentPda.toBase58());
+console.log(result.tournamentPda);        // already a base58 Address string
 console.log(result.txSignature);
 ```
 
-`organizerDeposit > 0` auto-creates the organizer's ATA if missing and folds the transfer into the same transaction.
+`organizerDeposit > 0n` auto-creates the organizer's ATA if missing and folds the transfer into the same transaction.
 
 ### Joining and reporting
 
@@ -107,9 +110,11 @@ await reportResult(client, {
   tournamentPda,
   round: 0,
   matchIndex: 0,
-  winner: winnerPubkey,
-  scoreA: 16,
-  scoreB: 14,
+  winner: winnerAddress,                  // Address — must equal playerA or playerB
+  // On the final match, pass `placements` to drive prize distribution:
+  // WTA (1): [champion]
+  // Standard (3): [champion, runnerUp, third]
+  // Deep (7): [champion, runnerUp, third, 5–8 × 4]
 });
 // On the final match, reportResult also distributes prizes + takes the 3.5% protocol fee in the same tx.
 ```
@@ -122,21 +127,42 @@ import { subscribe } from "@bracketchain/sdk";
 const unsubscribe = subscribe(client, tournamentPda, (event) => {
   if (event.kind === "tournament") {
     // Tournament account changed — status flip, new participant, etc.
-    console.log("Tournament:", event.tournament.status);
+    console.log("Tournament:", event.account.status);
   } else {
     // Match account changed — winner reported, etc.
-    console.log("Match:", event.match.matchIndex, "→", event.match.status);
+    console.log("Match:", event.account.matchIndex, "→", event.account.status);
   }
 }, {
-  matchPdas: [match0, match1],          // optional — subscribe to specific matches too
-  onError: (err) => {
+  matchPdas: [match0, match1],            // optional — subscribe to specific matches too
+  onError: ({ kind, address, cause }) => {
     // Decode failures + WS errors surface here. No auto-reconnect in MVP — V1 will add Drift v2-style resub.
-    console.warn("Subscription error:", err);
+    console.warn("Subscription error:", kind, address, cause);
   },
 });
 
-// Later:
-await unsubscribe();
+// Later (sync — no need to await):
+unsubscribe();
+```
+
+`subscribe()` requires `rpcSubscriptions` on the client; reads and writes do not.
+
+### Signer setup
+
+The client expects a Kit `TransactionSigner`. Two common sources:
+
+```ts
+// Node script — from a Solana keypair file
+import { createKeyPairSignerFromBytes } from "@solana/kit";
+import { readFile } from "node:fs/promises";
+
+const bytes = JSON.parse(await readFile("~/.config/solana/id.json", "utf8"));
+const signer = await createKeyPairSignerFromBytes(new Uint8Array(bytes));
+```
+
+```ts
+// Frontend — wrap a wallet-adapter `AnchorWallet` into a TransactionSigner.
+// See BracketChain-Frontend/lib/sdk.ts for the production bridge (uses
+// `@solana/compat.fromLegacyPublicKey` + a `VersionedTransaction` round-trip).
 ```
 
 ---
@@ -149,14 +175,16 @@ Everything below is re-exported from `@bracketchain/sdk`. Anything not listed is
 
 | Export | Purpose |
 |---|---|
-| `BracketChainClient` | Anchor wrapper — `connection`, `provider`, `program`, `programId`, `canSign` |
+| `BracketChainClient` | Kit-backed wrapper — `rpc`, `rpcSubscriptions?`, `signer?`, `programAddress`, `canSign` |
 | `BracketChainIndexerClient` | REST wrapper for the indexer service |
 
-### Reads (Anchor — `BracketChainClient`)
+### Reads (chain — `BracketChainClient`)
 
 | Method | Returns |
 |---|---|
 | `getTournament(client, pda)` | `Tournament \| null` |
+| `getMatch(client, pda)` | `MatchNode \| null` |
+| `getParticipant(client, pda)` | `Participant \| null` |
 | `getProtocolConfig(client)` | `ProtocolConfig \| null` |
 | `listTournaments(client)` | `TournamentWithAddress[]` (uses `getProgramAccounts`; prefer `BracketChainIndexerClient.listTournaments` for paginated UI listings) |
 | `getAllMatches(client, tournamentPda)` | `MatchNodeWithAddress[]` |
@@ -185,7 +213,7 @@ All methods accept an `AbortSignal` for cancellation.
 | `reportResult(client, params)` | `report_result` instruction (final match auto-distributes prize + fee) |
 | `cancelTournament(client, params)` | `cancel_tournament` instruction (organizer flips status; subsequent calls drive refund chunks — any signer) |
 
-### PDA helpers
+### PDA helpers — all `async`, return `ProgramDerivedAddress` (`[Address, number]`)
 
 ```ts
 import {
@@ -195,27 +223,30 @@ import {
   findParticipantPda,       // [b"participant", tournament, wallet]
   findMatchPda,             // [b"match", tournament, [round: u8], match_index_le_bytes(u16)]
 } from "@bracketchain/sdk";
+
+const [tournamentPda] = await findTournamentPda({ organizer, name: "My Tournament" });
 ```
 
-Each returns `[PublicKey, number]` (PDA + bump). `programId` defaults to the canonical devnet program but is overridable.
+`programAddress` defaults to `BRACKET_CHAIN_PROGRAM_ADDRESS` but is overridable via a second arg: `findTournamentPda(seeds, { programAddress })`.
 
 ### Account types
 
-`Tournament`, `Participant`, `MatchNode`, `ProtocolConfig`, plus `*WithAddress` variants that bundle the deserialized account with its public key.
+`Tournament`, `Participant`, `MatchNode`, `ProtocolConfig`, plus `*WithAddress` variants that bundle the decoded account with its `Address`. All come from the Codama-generated tree and use Kit's `Address` branded string + `bigint` for u64 fields.
 
-### Enum helpers
-
-Anchor enums are tagged-variant objects (`{ active: {} }`). Two helpers translate between that shape and ergonomic string kinds:
+### Enums (numeric — compare with `===`)
 
 ```ts
-import { getEnumKind, payoutPreset } from "@bracketchain/sdk";
+import { TournamentStatus, MatchStatus, PayoutPreset } from "@bracketchain/sdk";
 
-const kind = getEnumKind(tournament.status);
-// kind: "registration" | "pendingBracketInit" | "active" | "completed" | "cancelled"
+if (tournament.status === TournamentStatus.Active) {
+  // ...
+}
 
-const variant = payoutPreset("standard");
-// variant: { standard: {} }   — the shape Anchor expects in createTournament args
+const payoutPreset = PayoutPreset.Standard;
+// 0 → WinnerTakesAll, 1 → Standard, 2 → Deep
 ```
+
+No more Anchor-style `{ active: {} }` tagged objects and no `getEnumKind` helper — Codama emits plain numeric enums.
 
 ### Errors
 
@@ -231,7 +262,6 @@ import {
   InvalidPayoutPresetError,
   InvalidTokenMintError,
   ProtocolNotInitializedError,
-  TournamentNameTakenError,
   AlreadyRegisteredError,
   UnauthorizedReporterError,
   InvalidMatchError,
@@ -247,7 +277,7 @@ import {
 } from "@bracketchain/sdk";
 ```
 
-`mapError(err)` takes a raw Anchor / wallet / transport error and returns the most specific `BracketChainSDKError` subclass it can identify. Recommended pattern in callers:
+`mapError(err)` takes a raw `SolanaError` / wallet / transport error and returns the most specific `BracketChainSDKError` subclass it can identify. It walks the `SolanaError` `cause` chain so wrapped errors still get classified correctly. Recommended pattern in callers:
 
 ```ts
 try {
@@ -264,34 +294,43 @@ try {
 
 `instanceof` survives minification — `constructor.name` would not, so prefer the typed branches over name-string checks.
 
-### `BN` re-export
-
-```ts
-import { BN } from "@bracketchain/sdk";
-new BN(1_000_000);
-```
-
-Re-exported from `bn.js` so consumers don't need a direct dependency on `bn.js` or `@coral-xyz/anchor` just to construct `u64` arguments.
-
 ---
 
 ## Architecture notes
 
 ### Two orthogonal clients, deliberately
 
-A read-only viewer page (`/t/[id]`) instantiates a `BracketChainIndexerClient` for fast paginated reads and a wallet-less `BracketChainClient` purely as an RPC fallback for the `getTournament` chain read when the indexer is stale. Neither needs the other's state. A writing page (`/create`) instantiates a `BracketChainClient` with a connected wallet. The write path never touches the indexer client.
+A read-only viewer page (`/t/[id]`) instantiates a `BracketChainIndexerClient` for fast paginated reads and a signer-less `BracketChainClient` purely as an RPC fallback for the `getTournament` chain read when the indexer is stale. Neither needs the other's state. A writing page (`/create`) instantiates a `BracketChainClient` with a `signer`. The write path never touches the indexer client.
 
 This keeps the SDK composable across all four BracketChain frontend route types (read-only public, write-with-wallet, organizer dashboard, explore listing) without forcing a single "god client" on consumers.
 
 ### `subscribe()` is MVP-pattern
 
-A single `connection.onAccountChange` subscription per PDA (Tournament + optional MatchNodes), discriminated `kind: "tournament" | "match"` events, and an `onError` callback for decode failures. No auto-reconnect on WebSocket drop — that's V1 (Drift v2 pattern). The frontend's `useTournamentView` hook layers a 30s inactivity safety net and a fast reconcile-on-`onError` to compensate.
+A single `rpcSubscriptions.accountNotifications` subscription per PDA (Tournament + optional MatchNodes), discriminated `kind: "tournament" | "match"` events, and an `onError` callback for decode failures and connection-level errors. No auto-reconnect on WebSocket drop — that's V1 (Drift v2 pattern). The frontend's `useTournamentView` hook layers a 30s inactivity safety net and a fast reconcile-on-`onError` to compensate.
 
-### IDL is vendored, sync is manual
+### Codama-generated tree, not vendored IDL
 
-The Anchor IDL lives at `src/idl/bracket_chain.json` (+ `bracket_chain.ts` for typed Anchor accessors). It's vendored, not generated at install time. After every program build, run `pnpm sync-idl` from the SDK repo (or `make build` in the program repo, which invokes `make sync-idl` automatically and copies into both the SDK and the indexer).
+The on-chain client tree (accounts, instructions, decoders, declared PDA finders) lives under `src/generated/` and is produced from the program's Anchor IDL by [Codama](https://github.com/codama-idl/codama). It is **committed to the repo**, not generated at install time, so consumers can `pnpm add @bracketchain/sdk` without an IDL pipeline. To regenerate after a program redeploy, re-run Codama against the new IDL (the recipe lives in the program repo) and commit the diff.
 
-If you forget, the BorshCoder will silently decode new event payloads against the old discriminator and struct layout, producing junk values that don't crash. Codama-generated client is the V1 fix — see the open-architecture items in the main repo.
+The pre-0.4 vendored `bracket_chain.json` IDL + the `sync-idl` script are gone — Codama replaced them.
+
+### Anchor → Kit migration (0.3.x → 0.4.0)
+
+Breaking changes consumers care about:
+
+| Before (0.3.x) | After (0.4.0) |
+|---|---|
+| `new BracketChainClient({ connection, wallet })` | `new BracketChainClient({ rpc, rpcSubscriptions?, signer? })` |
+| `PublicKey` everywhere | `Address` (Kit branded string) |
+| `new BN(x)` for u64 | `bigint` (e.g. `1_000_000n`) or `number` |
+| `{ active: {} }` enum tag objects | Numeric enum: `TournamentStatus.Active` |
+| `payoutPreset("standard")` helper | `PayoutPreset.Standard` (numeric enum value) |
+| `getEnumKind(tournament.status)` | `tournament.status === TournamentStatus.Active` |
+| `result.tournamentPda.toBase58()` | `result.tournamentPda` (already a base58 string) |
+| PDA helpers sync, return `[PublicKey, number]` | All `async`, return `ProgramDerivedAddress` (`[Address, number]`) |
+| `BN` re-export | removed — use native `bigint` |
+
+The frontend bridge in [`BracketChain-Frontend/lib/sdk.ts`](../BracketChain-Frontend/lib/sdk.ts) shows one way to wire a wallet-adapter `AnchorWallet` into a Kit `TransactionSigner` via `@solana/compat`'s `fromLegacyPublicKey` + a `VersionedTransaction` round-trip for signing.
 
 ---
 
@@ -302,7 +341,6 @@ pnpm install
 pnpm build           # tsup → dist/index.{js,mjs,d.ts}
 pnpm dev             # watch mode
 pnpm typecheck       # tsc --noEmit (no emit; check types only)
-pnpm sync-idl        # copy IDL + types from ../bracket-chain-programs/target
 ```
 
 `prepublishOnly` runs `pnpm build` so a publish always ships fresh `dist/` artifacts. The `files` field in `package.json` whitelists only `dist/` for the npm tarball — source isn't shipped.
@@ -312,8 +350,7 @@ pnpm sync-idl        # copy IDL + types from ../bracket-chain-programs/target
 | Script | Purpose |
 |---|---|
 | `init-protocol.ts` | Idempotent one-shot to initialize the singleton `ProtocolConfig` on a target cluster. Invoked by the program repo's `make deploy-devnet` after `anchor deploy`. |
-| `e2e-demo.ts` | End-to-end demo path that exercises create → join × N → start → report → distribute against a live cluster. Useful as a script-level smoke test alongside the program's mocha suite. |
-| `sync-idl.mjs` | Copies IDL + types from the program build target into `src/idl/`. Manual step; run after every Anchor build. |
+| `e2e-demo.ts` | End-to-end demo path that exercises create → join × N → start → report → distribute against a live cluster. Useful as a script-level smoke test alongside the program's mocha suite. See [`scripts/README.md`](./scripts/README.md). |
 
 ---
 
@@ -321,19 +358,17 @@ pnpm sync-idl        # copy IDL + types from ../bracket-chain-programs/target
 
 ```
 .
-├── package.json             # version, exports, deps
-├── tsup.config.ts           # CJS + ESM dual build, dts
+├── package.json              # version, exports, deps
+├── tsup.config.ts            # CJS + ESM dual build, dts
 ├── tsconfig.json
 ├── src/
-│   ├── index.ts             # the only public entry
-│   ├── client.ts            # BracketChainClient
-│   ├── api.ts               # BracketChainIndexerClient + Indexer* types
-│   ├── errors.ts            # 21 error classes + mapError
-│   ├── pdas.ts              # 5 PDA helpers
-│   ├── types.ts             # account shapes, enums, helpers
-│   ├── idl/
-│   │   ├── bracket_chain.json    # vendored from program build
-│   │   └── bracket_chain.ts      # Anchor-typed wrapper
+│   ├── index.ts              # the only public entry
+│   ├── client.ts             # BracketChainClient (Kit)
+│   ├── api.ts                # BracketChainIndexerClient + Indexer* types
+│   ├── errors.ts             # 21 error classes + mapError
+│   ├── pdas.ts               # MatchPda helper + re-exports of generated finders
+│   ├── types.ts              # WithAddress + composite read shapes, re-exports from generated/
+│   ├── generated/            # Codama output — accounts, instructions, decoders, PDA finders
 │   └── methods/
 │       ├── createTournament.ts
 │       ├── joinTournament.ts
@@ -341,13 +376,13 @@ pnpm sync-idl        # copy IDL + types from ../bracket-chain-programs/target
 │       ├── reportResult.ts
 │       ├── cancelTournament.ts
 │       ├── subscribe.ts
-│       └── queries.ts        # getTournament, getProtocolConfig, listTournaments, getAllMatches, listParticipants, getTournamentState
+│       ├── queries.ts        # getTournament, getMatch, getParticipant, getProtocolConfig, listTournaments, getAllMatches, listParticipants, getTournamentState
+│       └── _send.ts          # internal: assertSigner + sendInstructions
 ├── scripts/
 │   ├── init-protocol.ts
 │   ├── e2e-demo.ts
-│   ├── sync-idl.mjs
 │   └── README.md
-└── dist/                    # build output — published to npm; gitignored locally
+└── dist/                     # build output — published to npm; gitignored locally
 ```
 
 ---
@@ -357,7 +392,7 @@ pnpm sync-idl        # copy IDL + types from ../bracket-chain-programs/target
 | Repo | Purpose |
 |---|---|
 | [`bracketchain-main`](../bracketchain-main) | Top-level README, hackathon plan, MVP-vs-V1 deltas, demo script |
-| [`bracket-chain-programs`](../bracket-chain-programs) | The Anchor program — source of the vendored IDL |
+| [`bracket-chain-programs`](../bracket-chain-programs) | The Anchor program — source IDL for Codama generation |
 | [`bracket-chain-indexer`](../bracket-chain-indexer) | NestJS read API + Helius webhook ingestor — REST surface consumed by `BracketChainIndexerClient` |
 | [`BracketChain-Frontend`](../BracketChain-Frontend) | Next.js web app — primary consumer of this SDK |
 
