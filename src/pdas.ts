@@ -1,89 +1,67 @@
-import { PublicKey } from "@solana/web3.js";
+import {
+  getAddressEncoder,
+  getBytesEncoder,
+  getProgramDerivedAddress,
+  type Address,
+  type ProgramDerivedAddress,
+} from "@solana/kit";
 
-// Seed constants — must match `bracket-chain-programs/src/constants.rs`.
-const PROTOCOL_CONFIG_SEED = Buffer.from("protocol_config");
-const TOURNAMENT_SEED = Buffer.from("tournament");
-const VAULT_SEED = Buffer.from("vault");
-const PARTICIPANT_SEED = Buffer.from("participant");
-const MATCH_SEED = Buffer.from("match");
+import { BRACKET_CHAIN_PROGRAM_ADDRESS } from "./generated";
 
-/**
- * Singleton ProtocolConfig PDA: ["protocol_config"].
- */
-export function findProtocolConfigPda(programId: PublicKey): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync([PROTOCOL_CONFIG_SEED], programId);
-}
+// Codama-generated PDAs cover everything Anchor declared in instruction
+// accounts. We re-export them under the original SDK names so the public API
+// stays stable across the Anchor→Kit migration.
+export {
+  findParticipantPda,
+  findProtocolConfigPda,
+  findTournamentPda,
+  findVaultPda,
+} from "./generated";
 
-/**
- * Tournament PDA: ["tournament", organizer, name_bytes].
- * Name is enforced ≤32 bytes on-chain — caller is responsible for validating
- * before calling this helper.
- */
-export function findTournamentPda(
-  organizer: PublicKey,
-  name: string,
-  programId: PublicKey,
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [TOURNAMENT_SEED, organizer.toBuffer(), Buffer.from(name)],
-    programId,
-  );
-}
+const MATCH_SEED = new Uint8Array([109, 97, 116, 99, 104]); // "match"
 
-/**
- * Vault PDA TokenAccount (NOT an ATA): ["vault", tournament].
- * Tournament PDA itself is the token authority — no separate vault-authority PDA.
- */
-export function findVaultPda(
-  tournament: PublicKey,
-  programId: PublicKey,
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [VAULT_SEED, tournament.toBuffer()],
-    programId,
-  );
-}
-
-/**
- * Participant PDA: ["participant", tournament, wallet].
- * One per (tournament, wallet) pair — Anchor `init` constraint enforces uniqueness.
- */
-export function findParticipantPda(
-  tournament: PublicKey,
-  wallet: PublicKey,
-  programId: PublicKey,
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [PARTICIPANT_SEED, tournament.toBuffer(), wallet.toBuffer()],
-    programId,
-  );
+export interface MatchSeeds {
+  tournament: Address;
+  /** 0-indexed bracket round; must fit in a u8. */
+  round: number;
+  /** 0-indexed match position within the round; must fit in a u16. */
+  matchIndex: number;
 }
 
 /**
  * MatchNode PDA: ["match", tournament, [round: u8], match_index_le_bytes(u16)].
- * `round` is single-byte; `matchIndex` is u16 little-endian.
+ *
+ * Match accounts are passed as `remaining_accounts` to `start_tournament`, so
+ * Codama doesn't auto-generate a finder for them — this is the hand-written
+ * Kit equivalent.
  */
-export function findMatchPda(
-  tournament: PublicKey,
-  round: number,
-  matchIndex: number,
-  programId: PublicKey,
-): [PublicKey, number] {
-  if (round < 0 || round > 255) {
-    throw new RangeError(`round must fit in u8 (0..255), got ${round}`);
+export async function findMatchPda(
+  seeds: MatchSeeds,
+  config: { programAddress?: Address } = {},
+): Promise<ProgramDerivedAddress> {
+  if (!Number.isInteger(seeds.round) || seeds.round < 0 || seeds.round > 255) {
+    throw new RangeError(`round must fit in u8 (0..255), got ${seeds.round}`);
   }
-  if (matchIndex < 0 || matchIndex > 0xffff) {
-    throw new RangeError(`matchIndex must fit in u16 (0..65535), got ${matchIndex}`);
+  if (
+    !Number.isInteger(seeds.matchIndex) ||
+    seeds.matchIndex < 0 ||
+    seeds.matchIndex > 0xffff
+  ) {
+    throw new RangeError(
+      `matchIndex must fit in u16 (0..65535), got ${seeds.matchIndex}`,
+    );
   }
-  const matchIndexLe = Buffer.alloc(2);
-  matchIndexLe.writeUInt16LE(matchIndex, 0);
-  return PublicKey.findProgramAddressSync(
-    [
-      MATCH_SEED,
-      tournament.toBuffer(),
-      Buffer.from([round]),
+  const matchIndexLe = new Uint8Array(2);
+  matchIndexLe[0] = seeds.matchIndex & 0xff;
+  matchIndexLe[1] = (seeds.matchIndex >> 8) & 0xff;
+
+  return await getProgramDerivedAddress({
+    programAddress: config.programAddress ?? BRACKET_CHAIN_PROGRAM_ADDRESS,
+    seeds: [
+      getBytesEncoder().encode(MATCH_SEED),
+      getAddressEncoder().encode(seeds.tournament),
+      new Uint8Array([seeds.round]),
       matchIndexLe,
     ],
-    programId,
-  );
+  });
 }

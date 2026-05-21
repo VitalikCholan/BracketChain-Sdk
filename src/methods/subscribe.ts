@@ -1,7 +1,13 @@
-import { Commitment, PublicKey } from "@solana/web3.js";
+import type { Address, Commitment } from "@solana/kit";
 
 import type { BracketChainClient } from "../client";
-import type { MatchNode, Tournament } from "../types";
+import { BracketChainSDKError } from "../errors";
+import {
+  getMatchNodeDecoder,
+  getTournamentDecoder,
+  type MatchNode,
+  type Tournament,
+} from "../generated";
 
 /**
  * Event emitted by {@link subscribe} when an account changes on-chain.
@@ -11,44 +17,37 @@ import type { MatchNode, Tournament } from "../types";
 export type TournamentSubscriptionEvent =
   | {
       kind: "tournament";
-      address: PublicKey;
+      address: Address;
       account: Tournament;
     }
   | {
       kind: "match";
-      address: PublicKey;
+      address: Address;
       account: MatchNode;
     };
 
 export interface SubscribeOptions {
   /**
-   * Additional MatchNode PDAs to watch alongside the tournament. The web app
-   * typically passes the current round's active matches — when those flip to
-   * Completed, swap to the next round and re-subscribe.
+   * MatchNode PDAs to watch alongside the tournament. The web app typically
+   * passes the current round's active matches.
    */
-  matchPdas?: PublicKey[];
+  matchPdas?: Address[];
   /**
    * Commitment for account-change deliveries. Defaults to the client's
-   * provider commitment.
+   * commitment.
    */
   commitment?: Commitment;
   /**
-   * Phase 5.4: invoked when a subscription's account-change handler throws
-   * during decode, OR when the underlying WebSocket signals an error event.
-   *
-   * Consumers can plug their own resub strategy here — the most common
-   * pattern is to tear down the current subscription and call `subscribe()`
-   * again after a backoff window. The SDK does NOT auto-resubscribe in MVP
-   * (full Drift v2 resub manager is V1+ scope) — the frontend's 30s inactivity
-   * reconcile is the safety net for transient WS drops.
+   * Invoked when the underlying notification stream errors or a decode fails.
+   * Consumers can plug their own resub strategy here.
    */
   onError?: (err: SubscriptionError) => void;
 }
 
-/** Phase 5.4: typed error surface for subscribe() callbacks. */
+/** Typed error surface for subscribe() callbacks. */
 export interface SubscriptionError {
-  /** Address whose handler threw, or null for connection-level errors. */
-  address: PublicKey | null;
+  /** Address whose handler threw, or `null` for connection-level errors. */
+  address: Address | null;
   /** Underlying error or message. */
   cause: unknown;
   /** Subscription kind that errored — useful for selective resub. */
@@ -56,83 +55,96 @@ export interface SubscriptionError {
 }
 
 /**
- * Live-subscribe to a tournament's on-chain state via Solana WebSocket
- * `onAccountChange`. The callback fires whenever the Tournament PDA or any
- * of the supplied MatchNode PDAs changes.
+ * Live-subscribe to a tournament's on-chain state via Kit RPC subscriptions.
  *
- * **Scope (MVP):** single tournament + caller-supplied match PDAs. We do NOT
- * generalize to multi-PDA filter/transform pipelines or auto-reconnect on
- * WS drop — those land in V1.
+ * The callback fires whenever the Tournament PDA or any of the supplied
+ * MatchNode PDAs changes.
  *
- * Errors thrown by Anchor's account decoder inside the callback are swallowed
- * silently — consumers don't see partial state. This function itself does not
- * throw; subscription-level RPC failures surface via the underlying connection's
- * own error handlers.
- *
- * @returns an unsubscribe fn that tears down every WS handler this call
- *   registered. Idempotent — safe to call multiple times.
+ * @returns an unsubscribe fn that aborts every underlying subscription this
+ *   call registered. Idempotent — safe to call multiple times.
  */
 export function subscribe(
   client: BracketChainClient,
-  tournamentPda: PublicKey,
+  tournamentPda: Address,
   callback: (event: TournamentSubscriptionEvent) => void,
   options: SubscribeOptions = {},
 ): () => void {
-  const commitment = options.commitment ?? client.provider.opts.commitment;
-  const subscriptionIds: number[] = [];
+  if (!client.rpcSubscriptions) {
+    throw new BracketChainSDKError(
+      "subscribe() requires `rpcSubscriptions` — pass it to BracketChainClient.",
+      "MissingRpcSubscriptions",
+    );
+  }
+
+  const abortController = new AbortController();
+  const commitment = options.commitment ?? client.commitment;
   const onError = options.onError;
 
-  // Tournament account
-  const tournamentSubId = client.connection.onAccountChange(
+  void runSubscription(
+    client,
     tournamentPda,
-    (accountInfo) => {
-      try {
-        const account = client.program.coder.accounts.decode<Tournament>(
-          "tournament",
-          accountInfo.data,
-        );
-        callback({ kind: "tournament", address: tournamentPda, account });
-      } catch (err) {
-        // Decode failure — account might have been closed or written by another
-        // program. Surface to onError so consumers can decide whether to resub
-        // (Phase 5.4); previously this was swallowed silently.
-        if (onError) {
-          onError({ address: tournamentPda, cause: err, kind: "tournament" });
-        }
-      }
-    },
+    "tournament",
+    abortController.signal,
     commitment,
+    (account) => callback({ kind: "tournament", address: tournamentPda, account }),
+    onError,
   );
-  subscriptionIds.push(tournamentSubId);
 
-  // MatchNode accounts
   for (const matchPda of options.matchPdas ?? []) {
-    const matchSubId = client.connection.onAccountChange(
+    void runSubscription(
+      client,
       matchPda,
-      (accountInfo) => {
-        try {
-          const account = client.program.coder.accounts.decode<MatchNode>(
-            "matchNode",
-            accountInfo.data,
-          );
-          callback({ kind: "match", address: matchPda, account });
-        } catch (err) {
-          if (onError) {
-            onError({ address: matchPda, cause: err, kind: "match" });
-          }
-        }
-      },
+      "match",
+      abortController.signal,
       commitment,
+      (account) => callback({ kind: "match", address: matchPda, account }),
+      onError,
     );
-    subscriptionIds.push(matchSubId);
   }
 
   let torn = false;
   return () => {
     if (torn) return;
     torn = true;
-    for (const id of subscriptionIds) {
-      void client.connection.removeAccountChangeListener(id);
-    }
+    abortController.abort();
   };
+}
+
+async function runSubscription<TKind extends "tournament" | "match">(
+  client: BracketChainClient,
+  address: Address,
+  kind: TKind,
+  abortSignal: AbortSignal,
+  commitment: Commitment,
+  emit: (account: TKind extends "tournament" ? Tournament : MatchNode) => void,
+  onError: ((err: SubscriptionError) => void) | undefined,
+): Promise<void> {
+  // Non-null asserted: subscribe() throws if rpcSubscriptions is missing.
+  const rpcSubscriptions = client.rpcSubscriptions!;
+  const decoder =
+    kind === "tournament" ? getTournamentDecoder() : getMatchNodeDecoder();
+
+  try {
+    const notifications = await rpcSubscriptions
+      .accountNotifications(address, { encoding: "base64", commitment })
+      .subscribe({ abortSignal });
+
+    for await (const notification of notifications) {
+      try {
+        const [base64Str] = notification.value.data;
+        const binary = atob(base64Str);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const account = decoder.decode(bytes) as TKind extends "tournament"
+          ? Tournament
+          : MatchNode;
+        emit(account);
+      } catch (err) {
+        if (onError) onError({ address, cause: err, kind });
+      }
+    }
+  } catch (err) {
+    if (abortSignal.aborted) return;
+    if (onError) onError({ address: null, cause: err, kind: "connection" });
+  }
 }
