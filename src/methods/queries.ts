@@ -1,14 +1,32 @@
-import { PublicKey } from "@solana/web3.js";
+import {
+  getAddressEncoder,
+  getBase58Decoder,
+  type Address,
+  type Base58EncodedBytes,
+  type ReadonlyUint8Array,
+} from "@solana/kit";
 
 import type { BracketChainClient } from "../client";
 import { mapError } from "../errors";
+import {
+  fetchMatchNode,
+  fetchParticipant,
+  fetchProtocolConfig,
+  fetchTournament,
+  getMatchNodeDecoder,
+  getParticipantDecoder,
+  getTournamentDecoder,
+  MATCH_NODE_DISCRIMINATOR,
+  PARTICIPANT_DISCRIMINATOR,
+  TOURNAMENT_DISCRIMINATOR,
+  type MatchNode,
+  type Participant,
+  type ProtocolConfig,
+  type Tournament,
+} from "../generated";
 import type {
-  MatchNode,
   MatchNodeWithAddress,
-  Participant,
   ParticipantWithAddress,
-  ProtocolConfig,
-  Tournament,
   TournamentState,
   TournamentWithAddress,
 } from "../types";
@@ -25,160 +43,147 @@ import type {
  *
  * @throws UnknownProgramError if the PDA does not exist or is owned by a
  *   different program.
- * @throws TransactionFailedError on unexpected RPC failures.
  */
 export async function getTournament(
   client: BracketChainClient,
-  pda: PublicKey,
+  pda: Address,
 ): Promise<Tournament> {
   try {
-    return (await client.program.account.tournament.fetch(pda)) as Tournament;
+    const account = await fetchTournament(client.rpc, pda);
+    return account.data;
   } catch (err) {
     throw mapError(err);
   }
 }
 
 /**
- * Fetch the singleton ProtocolConfig PDA (treasury, USDC mint, fee bps).
- *
- * Derive `pda` via {@link findProtocolConfigPda} — there is exactly one per
- * program deployment.
+ * Fetch a single MatchNode PDA's deserialized state.
+ */
+export async function getMatch(
+  client: BracketChainClient,
+  pda: Address,
+): Promise<MatchNode> {
+  try {
+    const account = await fetchMatchNode(client.rpc, pda);
+    return account.data;
+  } catch (err) {
+    throw mapError(err);
+  }
+}
+
+/**
+ * Fetch a single Participant PDA's deserialized state.
+ */
+export async function getParticipant(
+  client: BracketChainClient,
+  pda: Address,
+): Promise<Participant> {
+  try {
+    const account = await fetchParticipant(client.rpc, pda);
+    return account.data;
+  } catch (err) {
+    throw mapError(err);
+  }
+}
+
+/**
+ * Fetch the singleton ProtocolConfig PDA (treasury, default mint, fee bps).
  *
  * @throws UnknownProgramError if the protocol has not been initialized yet.
- * @throws TransactionFailedError on unexpected RPC failures.
  */
 export async function getProtocolConfig(
   client: BracketChainClient,
-  pda: PublicKey,
+  pda: Address,
 ): Promise<ProtocolConfig> {
   try {
-    return (await client.program.account.protocolConfig.fetch(pda)) as ProtocolConfig;
+    const account = await fetchProtocolConfig(client.rpc, pda);
+    return account.data;
   } catch (err) {
     throw mapError(err);
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// List queries.
-//
-// `Tournament` has no parent — listTournaments returns the entire program's
-// tournament accounts. Cheap on devnet (a few hundred at most), but for prod
-// the indexer (Phase 4) is the right path; this is a fallback / dev tool.
+// List queries (getProgramAccounts).
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * List every Tournament PDA owned by the program.
  *
  * Backed by `getProgramAccounts` — fine on devnet, but in production prefer
- * the Phase 4 indexer (`GET /tournaments`) which paginates and filters by
- * status. Treat this as a dev/fallback tool.
- *
- * @throws TransactionFailedError if the RPC node rejects the query (e.g. due
- *   to size limits or rate limiting).
+ * `BracketChainIndexerClient` which paginates and filters by status. Treat
+ * this as a dev/fallback tool.
  */
 export async function listTournaments(
   client: BracketChainClient,
 ): Promise<TournamentWithAddress[]> {
-  try {
-    const all = await client.program.account.tournament.all();
-    return all.map((entry) => ({
-      address: entry.publicKey,
-      account: entry.account as Tournament,
-    }));
-  } catch (err) {
-    throw mapError(err);
-  }
+  const rows = await fetchProgramAccountsByDiscriminator(
+    client,
+    TOURNAMENT_DISCRIMINATOR,
+  );
+  const decoder = getTournamentDecoder();
+  return rows.map((row) => ({
+    address: row.address,
+    account: decoder.decode(row.data),
+  }));
 }
 
 /**
- * Returns all MatchNode accounts belonging to a tournament, sorted by
- * `(round, matchIndex)` for stable UI rendering.
+ * All MatchNode accounts belonging to a tournament, sorted by `(round, matchIndex)`.
  *
- * Filters via memcmp on the first field after the 8-byte discriminator —
- * `tournament: Pubkey` (32 bytes at offset 8).
- *
- * @throws TransactionFailedError if the RPC node rejects the query.
+ * Filtered server-side via a two-filter memcmp:
+ *   1. discriminator at offset 0
+ *   2. tournament pubkey at offset 8 (first field after the discriminator)
  */
 export async function getAllMatches(
   client: BracketChainClient,
-  tournamentPda: PublicKey,
+  tournamentPda: Address,
 ): Promise<MatchNodeWithAddress[]> {
-  try {
-    const all = await client.program.account.matchNode.all([
-      {
-        memcmp: {
-          offset: 8, // skip 8-byte Anchor discriminator
-          bytes: tournamentPda.toBase58(),
-        },
-      },
-    ]);
-    return all
-      .map((entry) => ({
-        address: entry.publicKey,
-        account: entry.account as MatchNode,
-      }))
-      // Stable order: by round, then matchIndex. UI relies on this for rendering.
-      .sort((a, b) => {
-        if (a.account.round !== b.account.round) {
-          return a.account.round - b.account.round;
-        }
-        return a.account.matchIndex - b.account.matchIndex;
-      });
-  } catch (err) {
-    throw mapError(err);
-  }
+  const rows = await fetchProgramAccountsByDiscriminator(
+    client,
+    MATCH_NODE_DISCRIMINATOR,
+    { tournamentFilter: tournamentPda, tournamentOffset: 8n },
+  );
+  const decoder = getMatchNodeDecoder();
+  return rows
+    .map((row) => ({ address: row.address, account: decoder.decode(row.data) }))
+    .sort((a, b) => {
+      if (a.account.round !== b.account.round) {
+        return a.account.round - b.account.round;
+      }
+      return a.account.matchIndex - b.account.matchIndex;
+    });
 }
 
 /**
- * Returns all Participant accounts for a tournament, sorted by `seedIndex`.
- *
- * Same memcmp pattern as getAllMatches — `tournament` is the first field after
- * the discriminator.
- *
- * @throws TransactionFailedError if the RPC node rejects the query.
+ * All Participant accounts for a tournament, sorted by `seedIndex`.
  */
 export async function listParticipants(
   client: BracketChainClient,
-  tournamentPda: PublicKey,
+  tournamentPda: Address,
 ): Promise<ParticipantWithAddress[]> {
-  try {
-    const all = await client.program.account.participant.all([
-      {
-        memcmp: {
-          offset: 8,
-          bytes: tournamentPda.toBase58(),
-        },
-      },
-    ]);
-    return all
-      .map((entry) => ({
-        address: entry.publicKey,
-        account: entry.account as Participant,
-      }))
-      .sort((a, b) => a.account.seedIndex - b.account.seedIndex);
-  } catch (err) {
-    throw mapError(err);
-  }
+  const rows = await fetchProgramAccountsByDiscriminator(
+    client,
+    PARTICIPANT_DISCRIMINATOR,
+    { tournamentFilter: tournamentPda, tournamentOffset: 8n },
+  );
+  const decoder = getParticipantDecoder();
+  return rows
+    .map((row) => ({ address: row.address, account: decoder.decode(row.data) }))
+    .sort((a, b) => a.account.seedIndex - b.account.seedIndex);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Composite — runs three queries in parallel and bundles the result.
-// This is what the web app's /t/[address] page should call as its primary read.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * Composite read for the tournament-detail view: fetches the Tournament PDA,
  * its bracket (all MatchNodes), and its participant list in parallel.
- *
- * This is the canonical read path for the `/t/[address]` page — one call,
- * one network round-trip's worth of latency.
- *
- * @throws UnknownProgramError if the Tournament PDA does not exist.
- * @throws TransactionFailedError if any sub-query fails at the RPC level.
  */
 export async function getTournamentState(
   client: BracketChainClient,
-  tournamentPda: PublicKey,
+  tournamentPda: Address,
 ): Promise<TournamentState> {
   const [tournament, bracket, participants] = await Promise.all([
     getTournament(client, tournamentPda),
@@ -191,4 +196,73 @@ export async function getTournamentState(
     bracket,
     participants,
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Internal helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface ProgramAccountsFilterOptions {
+  tournamentFilter?: Address;
+  tournamentOffset?: bigint;
+}
+
+interface RawProgramAccount {
+  address: Address;
+  data: ReadonlyUint8Array;
+}
+
+function toBase58Bytes(data: ReadonlyUint8Array): Base58EncodedBytes {
+  return getBase58Decoder().decode(data) as Base58EncodedBytes;
+}
+
+async function fetchProgramAccountsByDiscriminator(
+  client: BracketChainClient,
+  discriminator: ReadonlyUint8Array,
+  opts: ProgramAccountsFilterOptions = {},
+): Promise<RawProgramAccount[]> {
+  const filters: Array<
+    | { memcmp: { bytes: Base58EncodedBytes; encoding: "base58"; offset: bigint } }
+  > = [
+    {
+      memcmp: {
+        bytes: toBase58Bytes(discriminator),
+        encoding: "base58",
+        offset: 0n,
+      },
+    },
+  ];
+
+  if (opts.tournamentFilter !== undefined) {
+    filters.push({
+      memcmp: {
+        bytes: toBase58Bytes(
+          getAddressEncoder().encode(opts.tournamentFilter),
+        ),
+        encoding: "base58",
+        offset: opts.tournamentOffset ?? 8n,
+      },
+    });
+  }
+
+  try {
+    const rows = await client.rpc
+      .getProgramAccounts(client.programAddress, {
+        encoding: "base64",
+        commitment: client.commitment,
+        filters,
+      })
+      .send();
+
+    return rows.map((row) => {
+      const [base64Str] = row.account.data;
+      // Node + browsers: `atob` decodes base64 → binary string; convert to bytes.
+      const binary = atob(base64Str);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return { address: row.pubkey, data: bytes };
+    });
+  } catch (err) {
+    throw mapError(err);
+  }
 }

@@ -1,14 +1,15 @@
 import {
-  AccountMeta,
-  PublicKey,
-  TransactionInstruction,
-} from "@solana/web3.js";
+  AccountRole,
+  type AccountMeta,
+  type Address,
+  type Instruction,
+  type Signature,
+} from "@solana/kit";
 import {
-  TOKEN_PROGRAM_ID,
-  createAssociatedTokenAccountInstruction,
-  getAccount,
-  getAssociatedTokenAddressSync,
-} from "@solana/spl-token";
+  findAssociatedTokenPda,
+  getCreateAssociatedTokenIdempotentInstructionAsync,
+  TOKEN_PROGRAM_ADDRESS,
+} from "@solana-program/token";
 
 import type { BracketChainClient } from "../client";
 import {
@@ -21,39 +22,44 @@ import {
   UnauthorizedReporterError,
   mapError,
 } from "../errors";
-import { findMatchPda, findProtocolConfigPda, findVaultPda } from "../pdas";
-import { getEnumKind } from "../types";
-import type {
-  MatchNode,
-  PayoutPresetVariant,
-  ProtocolConfig,
-  Tournament,
-} from "../types";
+import {
+  fetchMatchNode,
+  fetchProtocolConfig,
+  fetchTournament,
+  findProtocolConfigPda,
+  findVaultPda,
+  getReportResultInstructionAsync,
+  MatchStatus,
+  PayoutPreset,
+  TournamentStatus,
+  type Tournament,
+  type MatchNode,
+} from "../generated";
+import { findMatchPda } from "../pdas";
+import { assertSigner, sendInstructions } from "./_send";
 
 export interface ReportResultParams {
-  tournamentPda: PublicKey;
+  tournamentPda: Address;
   /** 0-indexed round of the match being reported. */
   round: number;
   /** 0-indexed match position within the round. */
   matchIndex: number;
-  /** Winner pubkey — must equal player_a or player_b on the match account. */
-  winner: PublicKey;
+  /** Winner address — must equal `playerA` or `playerB` on the match account. */
+  winner: Address;
   /**
    * Required ONLY when reporting the final match. Length + ordering:
    *  - WTA (1):      [champion]
    *  - Standard (3): [champion, runnerUp, third]
-   *  - Deep (7):     [champion, runnerUp, third, fifthEighth, fifthEighth,
-   *                   fifthEighth, fifthEighth]
+   *  - Deep (7):     [champion, runnerUp, third, 5–8, 5–8, 5–8, 5–8]
    *
    * Position 0 must equal `winner`; position 1 must be the loser of the final
-   * match (the program validates both on-chain). Positions 2+ are organizer-
-   * trusted in MVP.
+   * match. Positions 2+ are organizer-trusted in MVP.
    */
-  placements?: PublicKey[];
+  placements?: Address[];
 }
 
 export interface ReportResultResult {
-  txSignature: string;
+  txSignature: Signature;
   isFinal: boolean;
 }
 
@@ -61,86 +67,52 @@ export interface ReportResultResult {
  * Report a match winner. For non-final matches, advances the winner into the
  * next-round match's player slot. For the final match, distributes the prize
  * pool per the tournament's payout preset and flips status to Completed.
- *
- * Pre-flight (mirrors on-chain `require!` checks):
- *  - wallet is the organizer
- *  - tournament status is Active
- *  - match status is Active
- *  - winner ∈ { player_a, player_b }
- *  - if final: placements.length === preset.placementCount
- *  - if final: placements[0] === winner, placements[1] === runnerUp
- *
- * For the final match, the SDK pre-creates any missing placement / treasury
- * USDC ATAs as `preInstructions` on the same tx, so callers don't need a
- * separate "Create Account" step.
- *
- * @throws BracketChainSDKError with code `ReadOnlyClient` if the client has no signing wallet.
- * @throws BracketChainSDKError with code `InvalidArgument` for an unknown preset variant when computing the placement count.
- * @throws UnauthorizedReporterError if the caller is not the organizer.
- * @throws TournamentNotActiveError if the tournament status is not Active.
- * @throws MatchAlreadyReportedError if the match is already Completed.
- * @throws InvalidMatchError if the match status is not Active (e.g. parents not resolved).
- * @throws NonParticipantWinnerError if `winner` is not one of the match's two players, or final-match `placements[0]/[1]` mismatch.
- * @throws InvalidPayoutPresetError if `placements.length` does not match the preset's required count.
- * @throws TransactionFailedError on other on-chain rejections.
  */
 export async function reportResult(
   client: BracketChainClient,
   params: ReportResultParams,
 ): Promise<ReportResultResult> {
-  if (!client.canSign) {
-    throw new BracketChainSDKError(
-      "reportResult requires a signing wallet — pass `wallet` to BracketChainClient.",
-      "ReadOnlyClient",
-    );
-  }
-
-  const organizer = client.provider.wallet.publicKey;
+  const signer = assertSigner(client, "reportResult");
+  const organizer = signer.address;
   const tournamentPda = params.tournamentPda;
 
   // ── read tournament + match ──────────────────────────────────────────────
   let tournament: Tournament;
   try {
-    tournament = (await client.program.account.tournament.fetch(
-      tournamentPda,
-    )) as Tournament;
+    tournament = (await fetchTournament(client.rpc, tournamentPda)).data;
   } catch (err) {
     throw mapError(err);
   }
 
-  if (!tournament.organizer.equals(organizer)) {
+  if (tournament.organizer !== organizer) {
     throw new UnauthorizedReporterError();
   }
-  if (getEnumKind(tournament.status) !== "active") {
+  if (tournament.status !== TournamentStatus.Active) {
     throw new TournamentNotActiveError();
   }
 
-  const [matchPda] = findMatchPda(
-    tournamentPda,
-    params.round,
-    params.matchIndex,
-    client.programId,
-  );
+  const [matchPda] = await findMatchPda({
+    tournament: tournamentPda,
+    round: params.round,
+    matchIndex: params.matchIndex,
+  });
 
   let matchAccount: MatchNode;
   try {
-    matchAccount = (await client.program.account.matchNode.fetch(
-      matchPda,
-    )) as MatchNode;
+    matchAccount = (await fetchMatchNode(client.rpc, matchPda)).data;
   } catch (err) {
     throw mapError(err);
   }
 
-  const matchStatus = getEnumKind(matchAccount.status);
-  if (matchStatus === "completed") {
+  if (matchAccount.status === MatchStatus.Completed) {
     throw new MatchAlreadyReportedError();
   }
-  if (matchStatus !== "active") {
+  if (matchAccount.status !== MatchStatus.Active) {
     throw new InvalidMatchError();
   }
   if (
-    !params.winner.equals(matchAccount.playerA) &&
-    !params.winner.equals(matchAccount.playerB)
+    params.winner !== matchAccount.playerA &&
+    params.winner !== matchAccount.playerB
   ) {
     throw new NonParticipantWinnerError();
   }
@@ -148,16 +120,13 @@ export async function reportResult(
   const maxRound = Math.log2(tournament.bracketSize);
   const isFinal = params.round + 1 === maxRound && params.matchIndex === 0;
 
-  // ── branch: non-final ────────────────────────────────────────────────────
   if (!isFinal) {
-    return reportNonFinal(client, params, organizer, tournamentPda, matchPda);
+    return reportNonFinal(client, params, signer, tournamentPda, matchPda);
   }
-
-  // ── branch: final → payout distribution ──────────────────────────────────
   return reportFinal(
     client,
     params,
-    organizer,
+    signer,
     tournamentPda,
     matchPda,
     matchAccount,
@@ -168,46 +137,35 @@ export async function reportResult(
 async function reportNonFinal(
   client: BracketChainClient,
   params: ReportResultParams,
-  organizer: PublicKey,
-  tournamentPda: PublicKey,
-  matchPda: PublicKey,
+  signer: ReturnType<typeof assertSigner>,
+  tournamentPda: Address,
+  matchPda: Address,
 ): Promise<ReportResultResult> {
-  const [nextMatchPda] = findMatchPda(
-    tournamentPda,
-    params.round + 1,
-    Math.floor(params.matchIndex / 2),
-    client.programId,
-  );
+  const [nextMatchPda] = await findMatchPda({
+    tournament: tournamentPda,
+    round: params.round + 1,
+    matchIndex: Math.floor(params.matchIndex / 2),
+  });
 
-  const [protocolConfigPda] = findProtocolConfigPda(client.programId);
-  const [vaultPda] = findVaultPda(tournamentPda, client.programId);
+  const ix = await getReportResultInstructionAsync({
+    organizer: signer,
+    tournament: tournamentPda,
+    matchAccount: matchPda,
+    nextMatch: nextMatchPda,
+    winner: params.winner,
+    placements: [],
+  });
 
-  try {
-    const txSignature = await client.program.methods
-      .reportResult(params.winner, [])
-      .accountsPartial({
-        organizer,
-        tournament: tournamentPda,
-        matchAccount: matchPda,
-        nextMatch: nextMatchPda,
-        protocolConfig: protocolConfigPda,
-        vault: vaultPda,
-        tokenProgram: TOKEN_PROGRAM_ID,
-      })
-      .rpc();
-
-    return { txSignature, isFinal: false };
-  } catch (err) {
-    throw mapError(err);
-  }
+  const txSignature = await sendInstructions(client, signer, [ix]);
+  return { txSignature, isFinal: false };
 }
 
 async function reportFinal(
   client: BracketChainClient,
   params: ReportResultParams,
-  organizer: PublicKey,
-  tournamentPda: PublicKey,
-  matchPda: PublicKey,
+  signer: ReturnType<typeof assertSigner>,
+  tournamentPda: Address,
+  matchPda: Address,
   matchAccount: MatchNode,
   tournament: Tournament,
 ): Promise<ReportResultResult> {
@@ -221,144 +179,127 @@ async function reportFinal(
       ),
     );
   }
-  if (!placements[0]!.equals(params.winner)) {
+  if (placements[0] !== params.winner) {
     throw new NonParticipantWinnerError(
       new Error("placements[0] must equal `winner`"),
     );
   }
   if (placements.length >= 2) {
-    const runnerUp = params.winner.equals(matchAccount.playerA)
-      ? matchAccount.playerB
-      : matchAccount.playerA;
-    if (!placements[1]!.equals(runnerUp)) {
+    const runnerUp =
+      params.winner === matchAccount.playerA
+        ? matchAccount.playerB
+        : matchAccount.playerA;
+    if (placements[1] !== runnerUp) {
       throw new NonParticipantWinnerError(
         new Error("placements[1] must equal the loser of the final match"),
       );
     }
   }
 
-  // Read protocol_config to get treasury wallet for ATA derivation
-  const [protocolConfigPda] = findProtocolConfigPda(client.programId);
-  let protocolConfig: ProtocolConfig;
+  // Read protocol_config to get treasury wallet for ATA derivation.
+  const [protocolConfigPda] = await findProtocolConfigPda();
+  let protocolConfig;
   try {
-    protocolConfig = (await client.program.account.protocolConfig.fetch(
-      protocolConfigPda,
-    )) as ProtocolConfig;
+    protocolConfig = (await fetchProtocolConfig(client.rpc, protocolConfigPda))
+      .data;
   } catch (err) {
     throw mapError(err);
   }
 
   const tokenMint = tournament.tokenMint;
 
-  // Build ATA list: [...placementATAs, treasuryATA]
-  const placementAtas = placements.map((wallet) =>
-    getAssociatedTokenAddressSync(tokenMint, wallet),
+  // Build ATA list: [...placementATAs, treasuryATA] — match on-chain order.
+  const placementAtas = await Promise.all(
+    placements.map(async (wallet) => {
+      const [ata] = await findAssociatedTokenPda({
+        owner: wallet,
+        mint: tokenMint,
+        tokenProgram: TOKEN_PROGRAM_ADDRESS,
+      });
+      return { wallet, ata };
+    }),
   );
-  const treasuryAta = getAssociatedTokenAddressSync(
-    tokenMint,
-    protocolConfig.treasury,
-  );
+  const [treasuryAta] = await findAssociatedTokenPda({
+    owner: protocolConfig.treasury,
+    mint: tokenMint,
+    tokenProgram: TOKEN_PROGRAM_ADDRESS,
+  });
 
-  // Pre-create any missing ATAs in a single batch
-  const preInstructions = await buildAtaCreationIxs(
-    client,
-    organizer,
-    tokenMint,
-    [
-      ...placements.map((wallet, i) => ({ owner: wallet, ata: placementAtas[i]! })),
-      { owner: protocolConfig.treasury, ata: treasuryAta },
-    ],
-  );
+  // Idempotently create every ATA we depend on (winner placements + treasury).
+  const dedupeSet = new Set<Address>();
+  const ataInstructions = [];
+  for (const { wallet, ata } of placementAtas) {
+    if (dedupeSet.has(ata)) continue;
+    dedupeSet.add(ata);
+    ataInstructions.push(
+      await getCreateAssociatedTokenIdempotentInstructionAsync({
+        payer: signer,
+        owner: wallet,
+        mint: tokenMint,
+        ata,
+      }),
+    );
+  }
+  if (!dedupeSet.has(treasuryAta)) {
+    dedupeSet.add(treasuryAta);
+    ataInstructions.push(
+      await getCreateAssociatedTokenIdempotentInstructionAsync({
+        payer: signer,
+        owner: protocolConfig.treasury,
+        mint: tokenMint,
+        ata: treasuryAta,
+      }),
+    );
+  }
 
   const remainingAccounts: AccountMeta[] = [
-    ...placementAtas.map((pubkey) => ({
-      pubkey,
-      isSigner: false,
-      isWritable: true,
+    ...placementAtas.map(({ ata }) => ({
+      address: ata,
+      role: AccountRole.WRITABLE,
     })),
-    { pubkey: treasuryAta, isSigner: false, isWritable: true },
+    { address: treasuryAta, role: AccountRole.WRITABLE },
   ];
 
-  const [vaultPda] = findVaultPda(tournamentPda, client.programId);
+  const [vaultPda] = await findVaultPda({ tournament: tournamentPda });
 
-  try {
-    const txSignature = await client.program.methods
-      .reportResult(params.winner, placements)
-      .accountsPartial({
-        organizer,
-        tournament: tournamentPda,
-        matchAccount: matchPda,
-        nextMatch: null,
-        protocolConfig: protocolConfigPda,
-        vault: vaultPda,
-        tokenProgram: TOKEN_PROGRAM_ID,
-      })
-      .remainingAccounts(remainingAccounts)
-      .preInstructions(preInstructions)
-      .rpc();
+  const baseIx = await getReportResultInstructionAsync({
+    organizer: signer,
+    tournament: tournamentPda,
+    matchAccount: matchPda,
+    protocolConfig: protocolConfigPda,
+    vault: vaultPda,
+    winner: params.winner,
+    placements,
+  });
 
-    return { txSignature, isFinal: true };
-  } catch (err) {
-    throw mapError(err);
-  }
+  const ix: Instruction = {
+    ...baseIx,
+    accounts: [...(baseIx.accounts ?? []), ...remainingAccounts],
+  };
+
+  const txSignature = await sendInstructions(client, signer, [
+    ...ataInstructions,
+    ix,
+  ]);
+  return { txSignature, isFinal: true };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-function getPlacementCount(preset: PayoutPresetVariant): number {
-  const kind = getEnumKind(preset);
-  switch (kind) {
-    case "winnerTakesAll":
+function getPlacementCount(preset: PayoutPreset): number {
+  switch (preset) {
+    case PayoutPreset.WinnerTakesAll:
       return 1;
-    case "standard":
+    case PayoutPreset.Standard:
       return 3;
-    case "deep":
+    case PayoutPreset.Deep:
       return 7;
     default:
       throw new BracketChainSDKError(
-        `Unknown payout preset variant: "${kind}"`,
+        `Unknown payout preset: ${String(preset)}`,
         "InvalidArgument",
       );
   }
-}
-
-async function buildAtaCreationIxs(
-  client: BracketChainClient,
-  payer: PublicKey,
-  mint: PublicKey,
-  entries: Array<{ owner: PublicKey; ata: PublicKey }>,
-): Promise<TransactionInstruction[]> {
-  // Dedupe by ATA pubkey — same wallet can appear multiple times in placements
-  // (Deep preset has 4 × fifthEighth slots on different wallets, but defensive
-  // dedupe protects against caller mistakes).
-  const seen = new Set<string>();
-  const ixs: TransactionInstruction[] = [];
-
-  for (const { owner, ata } of entries) {
-    const key = ata.toBase58();
-    if (seen.has(key)) continue;
-    seen.add(key);
-
-    try {
-      await getAccount(client.connection, ata);
-      // ATA exists — no creation needed.
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (
-        err instanceof Error &&
-        (err.name === "TokenAccountNotFoundError" ||
-          /could not find|TokenAccountNotFound/i.test(message))
-      ) {
-        ixs.push(
-          createAssociatedTokenAccountInstruction(payer, ata, owner, mint),
-        );
-      } else {
-        throw mapError(err);
-      }
-    }
-  }
-
-  return ixs;
 }
