@@ -1,4 +1,11 @@
-import { AnchorError } from "@coral-xyz/anchor";
+import {
+  isSolanaError,
+  SOLANA_ERROR__ACCOUNTS__ACCOUNT_NOT_FOUND,
+  SOLANA_ERROR__INSTRUCTION_ERROR__ACCOUNT_ALREADY_INITIALIZED,
+  SOLANA_ERROR__INSTRUCTION_ERROR__CUSTOM,
+  SOLANA_ERROR__INSTRUCTION_ERROR__INSUFFICIENT_FUNDS,
+  SOLANA_ERROR__JSON_RPC__SERVER_ERROR_SEND_TRANSACTION_PREFLIGHT_FAILURE,
+} from "@solana/kit";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Base class — all SDK errors extend this. Consumers can `instanceof`-check
@@ -16,10 +23,11 @@ export class BracketChainSDKError extends Error {
     this.name = code;
     this.code = code;
     this.cause = cause;
-    // V8 stack-trace clean-up
-    if (typeof (Error as { captureStackTrace?: unknown }).captureStackTrace === "function") {
-      (Error as { captureStackTrace: (target: object, ctor: Function) => void })
-        .captureStackTrace(this, new.target);
+    const errCtor = Error as unknown as {
+      captureStackTrace?: (target: object, ctor: Function) => void;
+    };
+    if (typeof errCtor.captureStackTrace === "function") {
+      errCtor.captureStackTrace(this, new.target);
     }
   }
 }
@@ -60,11 +68,7 @@ export class RegistrationClosedError extends BracketChainSDKError {
 
 export class NameTooLongError extends BracketChainSDKError {
   constructor(cause?: unknown) {
-    super(
-      "Tournament name exceeds 32 bytes.",
-      "NameTooLong",
-      cause,
-    );
+    super("Tournament name exceeds 32 bytes.", "NameTooLong", cause);
   }
 }
 
@@ -145,7 +149,7 @@ export class AlreadyRegisteredError extends BracketChainSDKError {
 export class InsufficientBalanceError extends BracketChainSDKError {
   constructor(cause?: unknown) {
     super(
-      "Wallet's USDC balance is below the entry fee.",
+      "Wallet's token balance is below the entry fee.",
       "InsufficientBalance",
       cause,
     );
@@ -243,9 +247,8 @@ export class UnknownProgramError extends BracketChainSDKError {
 // ─────────────────────────────────────────────────────────────────────────────
 // On-chain BracketChainError code → SDK class lookup.
 //
-// These code numbers come from `bracket-chain-programs/src/errors.rs`. Anchor
-// numbers them sequentially starting at 6000 (the standard `#[error_code]`
-// offset), so the order in errors.rs determines the code.
+// Anchor numbers `#[error_code]` enums sequentially from 6000. The order in
+// `bracket-chain-programs/src/errors.rs` determines the code.
 //
 // If you add a new error code on-chain, add a row here. Order MATTERS.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -253,35 +256,38 @@ export class UnknownProgramError extends BracketChainSDKError {
 const ANCHOR_ERROR_OFFSET = 6000;
 
 const ERRORS_RS_ORDER = [
-  "UnauthorizedAuthority",      // 6000
-  "TournamentFull",             // 6001
-  "AlreadyRegistered",          // 6002
-  "RegistrationClosed",         // 6003
-  "NotInRegistration",          // 6004
-  "NotActive",                  // 6005
-  "NotCompleted",               // 6006
-  "InvalidPayoutPreset",        // 6007
-  "PresetExceedsParticipants",  // 6008
-  "MatchAlreadyReported",       // 6009
-  "NonParticipantWinner",       // 6010
-  "TournamentInProgress",       // 6011
-  "RefundAlreadyIssued",        // 6012
-  "MaxParticipantsExceeded",    // 6013
-  "MinParticipantsNotMet",      // 6014
-  "NameTooLong",                // 6015
-  "InvalidTokenMint",           // 6016
-  "InvalidVault",               // 6017
-  "InvalidTreasury",            // 6018
-  "InvalidMatchIndex",          // 6019
-  "ParentMatchesNotComplete",   // 6020
-  "RemainingAccountsMismatch",  // 6021
-  "ArithmeticOverflow",         // 6022
-  "SlotHashesUnavailable",      // 6023
+  "UnauthorizedAuthority", // 6000
+  "TournamentFull", // 6001
+  "AlreadyRegistered", // 6002
+  "RegistrationClosed", // 6003
+  "NotInRegistration", // 6004
+  "NotActive", // 6005
+  "NotCompleted", // 6006
+  "InvalidPayoutPreset", // 6007
+  "PresetExceedsParticipants", // 6008
+  "MatchAlreadyReported", // 6009
+  "NonParticipantWinner", // 6010
+  "TournamentInProgress", // 6011
+  "RefundAlreadyIssued", // 6012
+  "MaxParticipantsExceeded", // 6013
+  "MinParticipantsNotMet", // 6014
+  "NameTooLong", // 6015
+  "InvalidTokenMint", // 6016
+  "InvalidVault", // 6017
+  "InvalidTreasury", // 6018
+  "InvalidMatchIndex", // 6019
+  "ParentMatchesNotComplete", // 6020
+  "RemainingAccountsMismatch", // 6021
+  "ArithmeticOverflow", // 6022
+  "SlotHashesUnavailable", // 6023
 ] as const;
 
-type OnChainErrorName = typeof ERRORS_RS_ORDER[number];
+type OnChainErrorName = (typeof ERRORS_RS_ORDER)[number];
 
-const ON_CHAIN_TO_SDK: Record<OnChainErrorName, new (cause?: unknown) => BracketChainSDKError> = {
+const ON_CHAIN_TO_SDK: Record<
+  OnChainErrorName,
+  new (cause?: unknown) => BracketChainSDKError
+> = {
   UnauthorizedAuthority: UnauthorizedReporterError,
   TournamentFull: TournamentFullError,
   AlreadyRegistered: AlreadyRegisteredError,
@@ -309,11 +315,30 @@ const ON_CHAIN_TO_SDK: Record<OnChainErrorName, new (cause?: unknown) => Bracket
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Main entrypoint — wrap every SDK method's body in try/catch, call mapError.
+// Cause-chain walker for SolanaError → SDK typed errors.
 // ─────────────────────────────────────────────────────────────────────────────
 
+interface CauseLike {
+  cause?: unknown;
+}
+
 /**
- * Convert any low-level error (Anchor, web3.js, SystemProgram, SPL Token CPI)
+ * Iterate over `err` and every nested `.cause` until exhausted or a cycle is
+ * detected. Used to reach the on-chain `InstructionError::Custom` buried inside
+ * a JSON-RPC preflight error.
+ */
+function* walkCauses(err: unknown): Generator<unknown> {
+  const seen = new Set<unknown>();
+  let current: unknown = err;
+  while (current !== undefined && current !== null && !seen.has(current)) {
+    seen.add(current);
+    yield current;
+    current = (current as CauseLike)?.cause;
+  }
+}
+
+/**
+ * Convert any low-level error (Kit `SolanaError`, RPC failure, fetch error)
  * into a typed `BracketChainSDKError` subclass.
  *
  * If the error is already a `BracketChainSDKError`, returns it unchanged.
@@ -322,17 +347,54 @@ const ON_CHAIN_TO_SDK: Record<OnChainErrorName, new (cause?: unknown) => Bracket
 export function mapError(err: unknown): BracketChainSDKError {
   if (err instanceof BracketChainSDKError) return err;
 
-  if (err instanceof AnchorError) {
-    const codeNumber = err.error?.errorCode?.number;
-    if (typeof codeNumber === "number" && codeNumber >= ANCHOR_ERROR_OFFSET) {
-      const idx = codeNumber - ANCHOR_ERROR_OFFSET;
-      const name = ERRORS_RS_ORDER[idx];
-      if (name) {
-        const Ctor = ON_CHAIN_TO_SDK[name];
-        if (Ctor) return new Ctor(err);
+  // Walk the cause chain (top-level → ... → nested SolanaError) looking for
+  // an instruction-level Custom code, which carries the Anchor error number.
+  for (const node of walkCauses(err)) {
+    if (isSolanaError(node, SOLANA_ERROR__INSTRUCTION_ERROR__CUSTOM)) {
+      const codeNumber = node.context.code;
+      if (
+        typeof codeNumber === "number" &&
+        codeNumber >= ANCHOR_ERROR_OFFSET
+      ) {
+        const idx = codeNumber - ANCHOR_ERROR_OFFSET;
+        const name = ERRORS_RS_ORDER[idx];
+        if (name) {
+          const Ctor = ON_CHAIN_TO_SDK[name];
+          if (Ctor) return new Ctor(err);
+        }
       }
+      return new TransactionFailedError(
+        `On-chain custom error code ${codeNumber}`,
+        err,
+      );
     }
-    return new TransactionFailedError(err.error?.errorMessage ?? err.message, err);
+
+    if (
+      isSolanaError(node, SOLANA_ERROR__INSTRUCTION_ERROR__ACCOUNT_ALREADY_INITIALIZED)
+    ) {
+      // Anchor `init` on an existing PDA. Different methods need different
+      // surface errors (create → TournamentNameTaken, join → AlreadyRegistered),
+      // so call sites disambiguate before falling through to mapError.
+      return new TransactionFailedError("Account already initialized", err);
+    }
+
+    if (isSolanaError(node, SOLANA_ERROR__INSTRUCTION_ERROR__INSUFFICIENT_FUNDS)) {
+      return new InsufficientFundsError(err);
+    }
+
+    if (isSolanaError(node, SOLANA_ERROR__ACCOUNTS__ACCOUNT_NOT_FOUND)) {
+      return new UnknownProgramError(err);
+    }
+
+    if (
+      isSolanaError(
+        node,
+        SOLANA_ERROR__JSON_RPC__SERVER_ERROR_SEND_TRANSACTION_PREFLIGHT_FAILURE,
+      )
+    ) {
+      // Continue walking — the actual cause is nested inside this wrapper.
+      continue;
+    }
   }
 
   const message = err instanceof Error ? err.message : String(err);
@@ -341,10 +403,24 @@ export function mapError(err: unknown): BracketChainSDKError {
     return new InsufficientBalanceError(err);
   }
 
-  // Note: "account already in use" is intentionally NOT mapped here.
-  // Different methods need different errors (createTournament → TournamentNameTaken,
-  // joinTournament → AlreadyRegistered). Each call site handles it locally before
-  // delegating to mapError so the user sees a meaningful message.
-
   return new UnknownProgramError(err);
+}
+
+/**
+ * True if any node in the cause chain is a `SolanaError` with code
+ * `SOLANA_ERROR__INSTRUCTION_ERROR__ACCOUNT_ALREADY_INITIALIZED`. Used by
+ * call sites to disambiguate the surface error before delegating to `mapError`.
+ */
+export function isAccountAlreadyInitialized(err: unknown): boolean {
+  for (const node of walkCauses(err)) {
+    if (
+      isSolanaError(
+        node,
+        SOLANA_ERROR__INSTRUCTION_ERROR__ACCOUNT_ALREADY_INITIALIZED,
+      )
+    ) {
+      return true;
+    }
+  }
+  return false;
 }

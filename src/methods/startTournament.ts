@@ -1,10 +1,10 @@
 import {
-  AccountMeta,
-  ComputeBudgetProgram,
-  PublicKey,
-  SystemProgram,
-  SYSVAR_SLOT_HASHES_PUBKEY,
-} from "@solana/web3.js";
+  AccountRole,
+  type AccountMeta,
+  type Address,
+  type Instruction,
+  type Signature,
+} from "@solana/kit";
 
 import type { BracketChainClient } from "../client";
 import {
@@ -14,50 +14,40 @@ import {
   UnauthorizedReporterError,
   mapError,
 } from "../errors";
+import {
+  fetchTournament,
+  getStartTournamentInstruction,
+  TournamentStatus,
+  type MatchInitDescriptor,
+} from "../generated";
 import { findMatchPda } from "../pdas";
-import { getEnumKind } from "../types";
-import type { Participant, Tournament } from "../types";
+import { assertSigner, sendInstructions } from "./_send";
+import { listParticipants } from "./queries";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Chunk-size budget for legacy txs (1232 byte cap). Measured empirically:
-//   - Per descriptor: 69 bytes ix-data + 32 pubkey + 1 idx + AccountMeta
-//     overhead ≈ 110 bytes per match-PDA slot
-//   - After fixed overhead (signatures, header, blockhash, 4 fixed accounts,
-//     compute-budget ix, start_tournament ix framing) ≈ 920 bytes available
-//   - 920 / 110 ≈ 8.4 → 7 fits with margin, 8 spills by ~2 bytes
-//
-// 128 players → 127 matches → 19 chunks at default size 7. For V1, switching
-// to versioned tx + Address Lookup Table for the 4 fixed accounts unlocks
-// chunk size 8-10.
+// Tx-budget chunking constants — see notes in the original SDK; same envelope
+// since the on-chain handler is unchanged.
 // ─────────────────────────────────────────────────────────────────────────────
 const DEFAULT_CHUNK_SIZE = 7;
 const DEFAULT_COMPUTE_UNITS = 400_000;
 
-interface MatchInitDescriptor {
-  round: number;
-  matchIndex: number;
-  bump: number;
-  playerA: PublicKey;
-  playerB: PublicKey;
-  bye: boolean;
-}
+const DEFAULT_PLAYER: Address = "11111111111111111111111111111111" as Address;
 
 export interface StartTournamentParams {
-  tournamentPda: PublicKey;
+  tournamentPda: Address;
   /**
    * Player wallets in seed order. If omitted, the SDK auto-discovers via
-   * getProgramAccounts and orders ascending by `seed_index`. Pass this to
-   * apply an organizer-trusted shuffle (V1 will derive from on-chain seed_hash).
+   * `getProgramAccounts` and orders ascending by `seedIndex`.
    */
-  participantWallets?: PublicKey[];
-  /** Match-PDA inits per tx. Default {@link DEFAULT_CHUNK_SIZE}. */
+  participantWallets?: Address[];
+  /** Match-PDA inits per tx. Default 7. */
   chunkSize?: number;
-  /** Compute budget per chunk. Default {@link DEFAULT_COMPUTE_UNITS}. */
+  /** Compute budget per chunk. Default 400_000. */
   computeUnits?: number;
 }
 
 export interface StartTournamentResult {
-  txSignatures: string[];
+  txSignatures: Signature[];
   bracketSize: number;
   totalMatches: number;
 }
@@ -71,60 +61,35 @@ export interface StartTournamentResult {
  *     Registration → PendingBracketInit, then inits its descriptors.
  *  2. Subsequent chunks: status is PendingBracketInit. Program inits more
  *     match PDAs.
- *  3. Last chunk fills the final descriptor → status flips to Active and
- *     `TournamentStarted` event is emitted.
+ *  3. Last chunk fills the final descriptor → status flips to Active.
  *
- * Bracket layout (organizer-trusted, V1 will use VRF):
- *   - Round 0 pairs sequentially: match i = seeds[2i] vs seeds[2i+1]
- *   - Top seeds get byes when participant_count < bracket_size
- *   - Round 1+ have player slots pre-populated for parents that are byes
- *     (otherwise on-chain `report_result` can't auto-advance into a slot
- *     when only one parent is real)
- *
- * Each chunk runs with a 400K compute-unit budget (default), accounting
- * for create_account CPIs at ~5K CU per match-PDA init.
- *
- * @throws BracketChainSDKError with code `ReadOnlyClient` if the client has no signing wallet.
- * @throws BracketChainSDKError with code `InvalidArgument` if `participantWallets.length !== participantCount`.
- * @throws BracketChainSDKError with code `ParticipantCountMismatch` when auto-discovered wallets don't match on-chain count (typically RPC lag).
- * @throws UnauthorizedReporterError if the caller is not the organizer.
- * @throws RegistrationClosedError if status is not Registration or PendingBracketInit.
- * @throws MinParticipantsNotMetError if `participantCount < 2`.
- * @throws TransactionFailedError on chunk-tx rejection (the next call resumes from `matchesInitialized`).
+ * Each chunk runs with a 400K compute-unit budget by default.
  */
 export async function startTournament(
   client: BracketChainClient,
   params: StartTournamentParams,
 ): Promise<StartTournamentResult> {
-  if (!client.canSign) {
-    throw new BracketChainSDKError(
-      "startTournament requires a signing wallet — pass `wallet` to BracketChainClient.",
-      "ReadOnlyClient",
-    );
-  }
-
-  const organizer = client.provider.wallet.publicKey;
+  const signer = assertSigner(client, "startTournament");
+  const organizer = signer.address;
   const tournamentPda = params.tournamentPda;
 
   // ── read tournament + validate ────────────────────────────────────────────
-  let tournament: Tournament;
+  let tournament;
   try {
-    tournament = (await client.program.account.tournament.fetch(
-      tournamentPda,
-    )) as Tournament;
+    tournament = (await fetchTournament(client.rpc, tournamentPda)).data;
   } catch (err) {
     throw mapError(err);
   }
 
-  if (!tournament.organizer.equals(organizer)) {
+  if (tournament.organizer !== organizer) {
     throw new UnauthorizedReporterError();
   }
-
-  const statusKind = getEnumKind(tournament.status);
-  if (statusKind !== "registration" && statusKind !== "pendingBracketInit") {
+  if (
+    tournament.status !== TournamentStatus.Registration &&
+    tournament.status !== TournamentStatus.PendingBracketInit
+  ) {
     throw new RegistrationClosedError();
   }
-
   if (tournament.participantCount < 2) {
     throw new MinParticipantsNotMetError();
   }
@@ -133,56 +98,51 @@ export async function startTournament(
   const participantWallets = await resolveParticipantWallets(
     client,
     tournamentPda,
-    tournament,
+    tournament.participantCount,
     params.participantWallets,
   );
 
-  // ── build full descriptor list (round 0 + bye-propagation for round 1+) ──
-  const { descriptors, matchPdas, bracketSize } = buildBracketDescriptors(
-    tournamentPda,
-    participantWallets,
-    client.programId,
-  );
+  // ── build full descriptor list ────────────────────────────────────────────
+  const { descriptors, matchPdas, bracketSize } =
+    await buildBracketDescriptors(tournamentPda, participantWallets);
 
-  // If a prior partial start_tournament call already initialized some matches,
-  // skip them to be idempotent.
+  // Skip already-initialized matches (idempotent resume).
   const alreadyInit = tournament.matchesInitialized;
   const remainingDescriptors = descriptors.slice(alreadyInit);
   const remainingPdas = matchPdas.slice(alreadyInit);
 
   // ── chunk + send sequentially ─────────────────────────────────────────────
-  const chunkSize = Math.max(1, Math.min(params.chunkSize ?? DEFAULT_CHUNK_SIZE, 12));
+  const chunkSize = Math.max(
+    1,
+    Math.min(params.chunkSize ?? DEFAULT_CHUNK_SIZE, 12),
+  );
   const computeUnits = params.computeUnits ?? DEFAULT_COMPUTE_UNITS;
-  const txSignatures: string[] = [];
+  const txSignatures: Signature[] = [];
 
   for (let i = 0; i < remainingDescriptors.length; i += chunkSize) {
     const dChunk = remainingDescriptors.slice(i, i + chunkSize);
     const pdaChunk = remainingPdas.slice(i, i + chunkSize);
 
-    const remainingAccounts: AccountMeta[] = pdaChunk.map((pubkey) => ({
-      pubkey,
-      isSigner: false,
-      isWritable: true,
+    const remainingAccounts: AccountMeta[] = pdaChunk.map((address) => ({
+      address,
+      role: AccountRole.WRITABLE,
     }));
 
-    try {
-      const sig = await client.program.methods
-        .startTournament(dChunk as never)
-        .accountsPartial({
-          organizer,
-          tournament: tournamentPda,
-          slotHashes: SYSVAR_SLOT_HASHES_PUBKEY,
-          systemProgram: SystemProgram.programId,
-        })
-        .remainingAccounts(remainingAccounts)
-        .preInstructions([
-          ComputeBudgetProgram.setComputeUnitLimit({ units: computeUnits }),
-        ])
-        .rpc();
-      txSignatures.push(sig);
-    } catch (err) {
-      throw mapError(err);
-    }
+    const ix = getStartTournamentInstruction({
+      organizer: signer,
+      tournament: tournamentPda,
+      descriptors: dChunk,
+    });
+
+    const ixWithRemaining: Instruction = {
+      ...ix,
+      accounts: [...(ix.accounts ?? []), ...remainingAccounts],
+    };
+
+    const sig = await sendInstructions(client, signer, [ixWithRemaining], {
+      computeUnits,
+    });
+    txSignatures.push(sig);
   }
 
   return {
@@ -198,41 +158,28 @@ export async function startTournament(
 
 async function resolveParticipantWallets(
   client: BracketChainClient,
-  tournamentPda: PublicKey,
-  tournament: Tournament,
-  override?: PublicKey[],
-): Promise<PublicKey[]> {
+  tournamentPda: Address,
+  expectedCount: number,
+  override?: Address[],
+): Promise<Address[]> {
   if (override && override.length > 0) {
-    if (override.length !== tournament.participantCount) {
+    if (override.length !== expectedCount) {
       throw new BracketChainSDKError(
-        `participantWallets length (${override.length}) does not match on-chain participantCount (${tournament.participantCount})`,
+        `participantWallets length (${override.length}) does not match on-chain participantCount (${expectedCount})`,
         "InvalidArgument",
       );
     }
     return override;
   }
 
-  let all;
-  try {
-    all = await client.program.account.participant.all([
-      { memcmp: { offset: 8, bytes: tournamentPda.toBase58() } },
-    ]);
-  } catch (err) {
-    throw mapError(err);
-  }
-
-  if (all.length !== tournament.participantCount) {
+  const participants = await listParticipants(client, tournamentPda);
+  if (participants.length !== expectedCount) {
     throw new BracketChainSDKError(
-      `Expected ${tournament.participantCount} participants on-chain, found ${all.length}. RPC may be lagging — retry, or pass participantWallets explicitly.`,
+      `Expected ${expectedCount} participants on-chain, found ${participants.length}. RPC may be lagging — retry, or pass participantWallets explicitly.`,
       "ParticipantCountMismatch",
     );
   }
-
-  // Sort ascending by seed_index — this is the order in which players joined.
-  return all
-    .map((entry) => entry.account as Participant)
-    .sort((a, b) => a.seedIndex - b.seedIndex)
-    .map((p) => p.wallet);
+  return participants.map((p) => p.account.wallet);
 }
 
 function nextPowerOfTwo(n: number): number {
@@ -243,22 +190,19 @@ function nextPowerOfTwo(n: number): number {
 
 interface BuildBracketResult {
   descriptors: MatchInitDescriptor[];
-  matchPdas: PublicKey[];
+  matchPdas: Address[];
   bracketSize: number;
 }
 
 /**
  * Build the full bracket: round 0 pairs `[seeds[2i], seeds[2i+1]]`, with byes
  * for top seeds when N < bracket_size. Round 1+ have player slots pre-populated
- * only for parent matches that are byes — required because `report_result` only
- * advances the *current* match's winner; if a sibling parent is a bye and we
- * leave the round-1 slot empty, the round-1 match never reaches `Active`.
+ * only for parent matches that are byes.
  */
-function buildBracketDescriptors(
-  tournament: PublicKey,
-  players: PublicKey[],
-  programId: PublicKey,
-): BuildBracketResult {
+async function buildBracketDescriptors(
+  tournament: Address,
+  players: Address[],
+): Promise<BuildBracketResult> {
   const N = players.length;
   if (N < 2) {
     throw new MinParticipantsNotMetError();
@@ -267,25 +211,36 @@ function buildBracketDescriptors(
   const bracketSize = nextPowerOfTwo(N);
   const totalRounds = Math.log2(bracketSize);
   const padded = [...players];
-  while (padded.length < bracketSize) padded.push(PublicKey.default);
+  while (padded.length < bracketSize) padded.push(DEFAULT_PLAYER);
 
   const descriptors: MatchInitDescriptor[] = [];
-  const matchPdas: PublicKey[] = [];
+  const matchPdas: Address[] = [];
 
   // ── Round 0 ───────────────────────────────────────────────────────────────
   const round0Matches = bracketSize >> 1;
-  const round0ByeWinners: Array<PublicKey | null> = [];
+  const round0ByeWinners: Array<Address | null> = [];
   for (let m = 0; m < round0Matches; m++) {
     const a = padded[2 * m]!;
     const b = padded[2 * m + 1]!;
-    const aIsDefault = a.equals(PublicKey.default);
-    const bIsDefault = b.equals(PublicKey.default);
+    const aIsDefault = a === DEFAULT_PLAYER;
+    const bIsDefault = b === DEFAULT_PLAYER;
     const bye = aIsDefault || bIsDefault;
     const playerA = bye ? (aIsDefault ? b : a) : a;
-    const playerB = bye ? PublicKey.default : b;
+    const playerB = bye ? DEFAULT_PLAYER : b;
 
-    const [pda, bump] = findMatchPda(tournament, 0, m, programId);
-    descriptors.push({ round: 0, matchIndex: m, bump, playerA, playerB, bye });
+    const [pda, bump] = await findMatchPda({
+      tournament,
+      round: 0,
+      matchIndex: m,
+    });
+    descriptors.push({
+      round: 0,
+      matchIndex: m,
+      bump,
+      playerA,
+      playerB,
+      bye,
+    });
     matchPdas.push(pda);
     round0ByeWinners.push(bye ? playerA : null);
   }
@@ -294,20 +249,17 @@ function buildBracketDescriptors(
   for (let r = 1; r < totalRounds; r++) {
     const matches = bracketSize >> (r + 1);
     for (let m = 0; m < matches; m++) {
-      // Parents in round r-1: indices 2m (left, slot a) and 2m+1 (right, slot b)
-      let playerA = PublicKey.default;
-      let playerB = PublicKey.default;
+      let playerA: Address = DEFAULT_PLAYER;
+      let playerB: Address = DEFAULT_PLAYER;
       if (r === 1) {
-        playerA = round0ByeWinners[2 * m] ?? PublicKey.default;
-        playerB = round0ByeWinners[2 * m + 1] ?? PublicKey.default;
+        playerA = round0ByeWinners[2 * m] ?? DEFAULT_PLAYER;
+        playerB = round0ByeWinners[2 * m + 1] ?? DEFAULT_PLAYER;
       }
-      // r ≥ 2: byes can only propagate past round 0 in highly-skewed brackets
-      // (e.g. 5-of-8 gives r1m0 with both bye parents). Handling that here
-      // would require recursive winner tracking; for our typical "≤ 1 bye row"
-      // brackets the on-chain `report_result` flow handles propagation correctly
-      // once the round-1 sibling reports.
-
-      const [pda, bump] = findMatchPda(tournament, r, m, programId);
+      const [pda, bump] = await findMatchPda({
+        tournament,
+        round: r,
+        matchIndex: m,
+      });
       descriptors.push({
         round: r,
         matchIndex: m,

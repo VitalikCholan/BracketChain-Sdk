@@ -19,27 +19,36 @@
  * The funder keypair is the protocol authority. They must have ≥ ~0.005 SOL on
  * the target cluster (rent for the ProtocolConfig PDA + tx fee).
  *
- * On-chain program: AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1 (devnet).
+ * Devnet program ID (BRACKET_CHAIN_PROGRAM_ADDRESS): AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1.
  */
 
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-import { AnchorProvider, Program, Wallet, Idl } from "@coral-xyz/anchor";
 import {
-  Connection,
-  Keypair,
-  LAMPORTS_PER_SOL,
-  PublicKey,
-  SystemProgram,
-  Transaction,
-} from "@solana/web3.js";
-import { getMint } from "@solana/spl-token";
+  address,
+  appendTransactionMessageInstructions,
+  createKeyPairSignerFromBytes,
+  createSolanaRpc,
+  createSolanaRpcSubscriptions,
+  createTransactionMessage,
+  getSignatureFromTransaction,
+  pipe,
+  sendAndConfirmTransactionFactory,
+  setTransactionMessageFeePayerSigner,
+  setTransactionMessageLifetimeUsingBlockhash,
+  signTransactionMessageWithSigners,
+  type Address,
+} from "@solana/kit";
+import { fetchMaybeMint } from "@solana-program/token";
 
-import { findProtocolConfigPda } from "../src";
-import IDL_JSON from "../src/idl/bracket_chain.json" with { type: "json" };
-import type { BracketChain } from "../src/idl/bracket_chain";
+import {
+  BRACKET_CHAIN_PROGRAM_ADDRESS,
+  fetchMaybeProtocolConfig,
+  findProtocolConfigPda,
+  getInitializeProtocolInstructionAsync,
+} from "../src/generated";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Defaults
@@ -48,11 +57,11 @@ import type { BracketChain } from "../src/idl/bracket_chain";
 // Canonical devnet USDC. Any wallet on devnet that ever ran the test faucet at
 // https://spl-token-faucet.com/?token-name=USDC-Dev or received a transfer of
 // "devnet USDC" holds tokens of this mint.
-const DEFAULT_USDC_MINT = new PublicKey(
+const DEFAULT_USDC_MINT = address(
   "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
 );
 
-const MIN_FUNDER_LAMPORTS = 0.005 * LAMPORTS_PER_SOL;
+const MIN_FUNDER_LAMPORTS = 5_000_000n; // 0.005 SOL
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CLI
@@ -61,8 +70,8 @@ const MIN_FUNDER_LAMPORTS = 0.005 * LAMPORTS_PER_SOL;
 interface Cli {
   rpc: string;
   funderKeypair: string;
-  usdcMint: PublicKey;
-  treasury: PublicKey | null; // null → use funder pubkey
+  usdcMint: Address;
+  treasury: Address | null; // null → use funder pubkey
 }
 
 function parseCli(): Cli {
@@ -81,41 +90,34 @@ function parseCli(): Cli {
       get("funder") ??
       process.env.FUNDER_KEYPAIR ??
       path.join(os.homedir(), ".config", "solana", "id.json"),
-    usdcMint: usdcMintArg ? new PublicKey(usdcMintArg) : DEFAULT_USDC_MINT,
-    treasury: treasuryArg ? new PublicKey(treasuryArg) : null,
+    usdcMint: usdcMintArg ? address(usdcMintArg) : DEFAULT_USDC_MINT,
+    treasury: treasuryArg ? address(treasuryArg) : null,
   };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Helpers (mirror e2e-demo.ts patterns)
+// Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-function loadKeypair(filePath: string): Keypair {
+async function loadSigner(filePath: string) {
   const expanded = filePath.startsWith("~")
     ? path.join(os.homedir(), filePath.slice(1))
     : filePath;
   const raw = JSON.parse(fs.readFileSync(expanded, "utf8")) as number[];
-  return Keypair.fromSecretKey(Uint8Array.from(raw));
+  return createKeyPairSignerFromBytes(Uint8Array.from(raw));
 }
 
-function shortAddr(pk: PublicKey): string {
-  const s = pk.toBase58();
-  return `${s.slice(0, 4)}…${s.slice(-4)}`;
+function shortAddr(addr: Address): string {
+  return `${addr.slice(0, 4)}…${addr.slice(-4)}`;
 }
 
-function makeWallet(kp: Keypair): Wallet {
-  return {
-    publicKey: kp.publicKey,
-    payer: kp,
-    async signTransaction<T extends Transaction>(tx: T): Promise<T> {
-      tx.partialSign(kp);
-      return tx;
-    },
-    async signAllTransactions<T extends Transaction>(txs: T[]): Promise<T[]> {
-      txs.forEach((t) => t.partialSign(kp));
-      return txs;
-    },
-  } as unknown as Wallet;
+function deriveWsEndpoint(httpEndpoint: string): string {
+  // Mirrors lib/sdk.ts logic in the frontend — only flips the protocol prefix.
+  if (httpEndpoint.startsWith("https://"))
+    return `wss://${httpEndpoint.slice("https://".length)}`;
+  if (httpEndpoint.startsWith("http://"))
+    return `ws://${httpEndpoint.slice("http://".length)}`;
+  return httpEndpoint;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -124,57 +126,57 @@ function makeWallet(kp: Keypair): Wallet {
 
 async function main(): Promise<void> {
   const cli = parseCli();
-  const conn = new Connection(cli.rpc, "confirmed");
-  const funder = loadKeypair(cli.funderKeypair);
-  const treasury = cli.treasury ?? funder.publicKey;
+  const rpc = createSolanaRpc(cli.rpc);
+  const rpcSubscriptions = createSolanaRpcSubscriptions(
+    deriveWsEndpoint(cli.rpc),
+  );
+  const funder = await loadSigner(cli.funderKeypair);
+  const treasury = cli.treasury ?? funder.address;
 
   console.log("BracketChain protocol initializer");
   console.log(`  rpc:           ${cli.rpc}`);
-  console.log(`  funder:        ${funder.publicKey.toBase58()}`);
-  console.log(`  treasury:      ${treasury.toBase58()}${cli.treasury ? "" : "  (defaulted to funder)"}`);
-  console.log(`  usdc_mint:     ${cli.usdcMint.toBase58()}${cli.usdcMint.equals(DEFAULT_USDC_MINT) ? "  (canonical devnet USDC)" : "  (override)"}`);
+  console.log(`  funder:        ${funder.address}`);
+  console.log(
+    `  treasury:      ${treasury}${cli.treasury ? "" : "  (defaulted to funder)"}`,
+  );
+  console.log(
+    `  usdc_mint:     ${cli.usdcMint}${cli.usdcMint === DEFAULT_USDC_MINT ? "  (canonical devnet USDC)" : "  (override)"}`,
+  );
 
   // ── Sanity: funder has SOL ─────────────────────────────────────────────────
-  const balance = await conn.getBalance(funder.publicKey);
+  const { value: balance } = await rpc.getBalance(funder.address).send();
   if (balance < MIN_FUNDER_LAMPORTS) {
     throw new Error(
-      `Funder ${shortAddr(funder.publicKey)} has ${balance / LAMPORTS_PER_SOL} SOL — need ≥ ${MIN_FUNDER_LAMPORTS / LAMPORTS_PER_SOL}. Run \`solana airdrop 1 --url devnet\`.`,
+      `Funder ${shortAddr(funder.address)} has ${Number(balance) / 1e9} SOL — need ≥ ${Number(MIN_FUNDER_LAMPORTS) / 1e9}. Run \`solana airdrop 1 --url devnet\`.`,
     );
   }
 
   // ── Sanity: USDC mint exists on this cluster ───────────────────────────────
-  try {
-    const mint = await getMint(conn, cli.usdcMint);
-    console.log(`  mint check:    decimals=${mint.decimals}, supply=${mint.supply.toString()}`);
-  } catch (err) {
+  const mint = await fetchMaybeMint(rpc, cli.usdcMint);
+  if (!mint.exists) {
     throw new Error(
-      `USDC mint ${cli.usdcMint.toBase58()} does not exist on this cluster. ` +
+      `USDC mint ${cli.usdcMint} does not exist on this cluster. ` +
         `Either pass --usdc-mint=<pubkey> with a valid mint, or pick a different --rpc.`,
     );
   }
-
-  // ── Setup Anchor ───────────────────────────────────────────────────────────
-  const provider = new AnchorProvider(conn, makeWallet(funder), { commitment: "confirmed" });
-  const program = new Program<BracketChain>(
-    IDL_JSON as unknown as BracketChain & Idl,
-    provider,
+  console.log(
+    `  mint check:    decimals=${mint.data.decimals}, supply=${mint.data.supply.toString()}`,
   );
-  const programId = program.programId;
-  const [protocolConfigPda] = findProtocolConfigPda(programId);
 
-  console.log(`  program_id:    ${programId.toBase58()}`);
-  console.log(`  config_pda:    ${protocolConfigPda.toBase58()}`);
+  // ── PDA + idempotency ──────────────────────────────────────────────────────
+  const [protocolConfigPda] = await findProtocolConfigPda();
+  console.log(`  program_id:    ${BRACKET_CHAIN_PROGRAM_ADDRESS}`);
+  console.log(`  config_pda:    ${protocolConfigPda}`);
 
-  // ── Idempotency: skip if already initialized ───────────────────────────────
-  const existing = await conn.getAccountInfo(protocolConfigPda);
-  if (existing) {
-    const cfg = await program.account.protocolConfig.fetch(protocolConfigPda);
+  const existing = await fetchMaybeProtocolConfig(rpc, protocolConfigPda);
+  if (existing.exists) {
+    const cfg = existing.data;
     console.log("\n✅ ProtocolConfig already initialized:");
-    console.log(`   authority:  ${cfg.authority.toBase58()}`);
-    console.log(`   treasury:   ${cfg.treasury.toBase58()}`);
-    console.log(`   default_mint: ${cfg.defaultMint.toBase58()}`);
+    console.log(`   authority:    ${cfg.authority}`);
+    console.log(`   treasury:     ${cfg.treasury}`);
+    console.log(`   default_mint: ${cfg.defaultMint}`);
     console.log(`   fee_bps:      ${cfg.feeBps}`);
-    if (!cfg.defaultMint.equals(cli.usdcMint)) {
+    if (cfg.defaultMint !== cli.usdcMint) {
       console.log(
         `\n⚠️  on-chain default_mint differs from your --usdc-mint argument. Existing config wins; reinit is not possible without redeploying the program.`,
       );
@@ -184,27 +186,45 @@ async function main(): Promise<void> {
 
   // ── Send initialize_protocol ───────────────────────────────────────────────
   console.log("\n  sending initialize_protocol...");
-  const sig = await program.methods
-    .initializeProtocol()
-    .accountsPartial({
-      authority: funder.publicKey,
-      protocolConfig: protocolConfigPda,
-      treasury,
-      defaultMint: cli.usdcMint,
-      systemProgram: SystemProgram.programId,
-    })
-    .rpc();
+  const ix = await getInitializeProtocolInstructionAsync({
+    authority: funder,
+    protocolConfig: protocolConfigPda,
+    treasury,
+    defaultMint: cli.usdcMint,
+  });
+
+  const { value: latestBlockhash } = await rpc
+    .getLatestBlockhash({ commitment: "confirmed" })
+    .send();
+  const message = pipe(
+    createTransactionMessage({ version: 0 }),
+    (m) => setTransactionMessageFeePayerSigner(funder, m),
+    (m) => setTransactionMessageLifetimeUsingBlockhash(latestBlockhash, m),
+    (m) => appendTransactionMessageInstructions([ix], m),
+  );
+  const signed = await signTransactionMessageWithSigners(message);
+  const sendAndConfirm = sendAndConfirmTransactionFactory({
+    rpc,
+    rpcSubscriptions,
+  });
+  await sendAndConfirm(signed, { commitment: "confirmed" });
+  const sig = getSignatureFromTransaction(signed);
 
   console.log(`\n✅ ProtocolConfig initialized.`);
   console.log(`   tx:         ${sig}`);
-  console.log(`   explorer:   https://explorer.solana.com/tx/${sig}?cluster=devnet`);
+  console.log(
+    `   explorer:   https://explorer.solana.com/tx/${sig}?cluster=devnet`,
+  );
 
   // ── Verify ─────────────────────────────────────────────────────────────────
-  const cfg = await program.account.protocolConfig.fetch(protocolConfigPda);
-  console.log(`   authority:    ${cfg.authority.toBase58()}`);
-  console.log(`   treasury:     ${cfg.treasury.toBase58()}`);
-  console.log(`   default_mint: ${cfg.defaultMint.toBase58()}`);
-  console.log(`   fee_bps:      ${cfg.feeBps}`);
+  const verified = await fetchMaybeProtocolConfig(rpc, protocolConfigPda);
+  if (verified.exists) {
+    const cfg = verified.data;
+    console.log(`   authority:    ${cfg.authority}`);
+    console.log(`   treasury:     ${cfg.treasury}`);
+    console.log(`   default_mint: ${cfg.defaultMint}`);
+    console.log(`   fee_bps:      ${cfg.feeBps}`);
+  }
 }
 
 main().catch((err) => {
