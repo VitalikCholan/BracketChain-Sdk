@@ -81,18 +81,16 @@ export type Tournament = {
   vault: Address;
   entryFee: bigint;
   /**
-   * Optional organizer top-up transferred into the vault at creation.
-   * `0` is allowed. Treated as a refundable commitment (Variant A):
-   * returned to the organizer on `cancel_tournament` (pre-start) AND on
-   * `report_result` final-match. The deposit is excluded from the
-   * prize-pool basis — protocol fee + placement payouts apply to
-   * `vault.amount - organizer_deposit` only.
+   * Optional organizer top-up to the prize pool, transferred into the vault
+   * at creation. `0` is allowed. Refunded back to the organizer if the
+   * tournament is cancelled before the first match. On completion, it stays
+   * in the vault and is distributed as part of the prize pool (Variant B).
    */
   organizerDeposit: bigint;
   /**
-   * Set true once the deposit has been refunded — by `cancel_tournament`
-   * (any-call, idempotent across chunks) or by `report_result` final-match.
-   * Independent of per-participant `refund_paid` flags.
+   * Tracks whether the organizer's deposit refund has been issued during a
+   * cancellation. Independent of per-participant `refund_paid` flags so the
+   * two paths can be processed in any order across cancel chunks.
    */
   organizerDepositRefunded: boolean;
   maxParticipants: number;
@@ -124,18 +122,16 @@ export type TournamentArgs = {
   vault: Address;
   entryFee: number | bigint;
   /**
-   * Optional organizer top-up transferred into the vault at creation.
-   * `0` is allowed. Treated as a refundable commitment (Variant A):
-   * returned to the organizer on `cancel_tournament` (pre-start) AND on
-   * `report_result` final-match. The deposit is excluded from the
-   * prize-pool basis — protocol fee + placement payouts apply to
-   * `vault.amount - organizer_deposit` only.
+   * Optional organizer top-up to the prize pool, transferred into the vault
+   * at creation. `0` is allowed. Refunded back to the organizer if the
+   * tournament is cancelled before the first match. On completion, it stays
+   * in the vault and is distributed as part of the prize pool (Variant B).
    */
   organizerDeposit: number | bigint;
   /**
-   * Set true once the deposit has been refunded — by `cancel_tournament`
-   * (any-call, idempotent across chunks) or by `report_result` final-match.
-   * Independent of per-participant `refund_paid` flags.
+   * Tracks whether the organizer's deposit refund has been issued during a
+   * cancellation. Independent of per-participant `refund_paid` flags so the
+   * two paths can be processed in any order across cancel chunks.
    */
   organizerDepositRefunded: boolean;
   maxParticipants: number;
