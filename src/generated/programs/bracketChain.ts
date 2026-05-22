@@ -80,7 +80,7 @@ import {
 } from "../pdas";
 
 export const BRACKET_CHAIN_PROGRAM_ADDRESS =
-  "3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ" as Address<"3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ">;
+  "AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1" as Address<"AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1">;
 
 export enum BracketChainAccount {
   MatchNode,
@@ -229,7 +229,7 @@ export function identifyBracketChainInstruction(
 }
 
 export type ParsedBracketChainInstruction<
-  TProgram extends string = "3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ",
+  TProgram extends string = "AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1",
 > =
   | ({
       instructionType: BracketChainInstruction.CancelTournament;

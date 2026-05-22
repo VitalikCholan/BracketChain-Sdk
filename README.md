@@ -17,7 +17,7 @@ pnpm add @bracketchain/sdk
 | Build | tsup, CJS + ESM dual, types included |
 | Client base | [`@solana/kit`](https://www.npmjs.com/package/@solana/kit) 6.9 — no `@coral-xyz/anchor`, no `@solana/web3.js` v1 in the runtime |
 | Generated tree | [Codama](https://github.com/codama-idl/codama) — accounts, instructions, decoders, PDA finders |
-| Devnet program | `3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ` |
+| Devnet program | `AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1` |
 | Subpaths | none yet — `./react` hooks subpath is V1 (reference hooks live in [`BracketChain-Frontend/hooks/`](../BracketChain-Frontend/hooks)) |
 
 ---

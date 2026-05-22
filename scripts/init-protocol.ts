@@ -19,7 +19,7 @@
  * The funder keypair is the protocol authority. They must have ≥ ~0.005 SOL on
  * the target cluster (rent for the ProtocolConfig PDA + tx fee).
  *
- * Devnet program ID (BRACKET_CHAIN_PROGRAM_ADDRESS): 3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ.
+ * Devnet program ID (BRACKET_CHAIN_PROGRAM_ADDRESS): AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1.
  */
 
 import * as fs from "node:fs";
