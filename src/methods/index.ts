@@ -41,6 +41,47 @@ export type {
   ReportResultResult,
 } from "./reportResult";
 
+// ── Player-reported settlement (Stage B) ────────────────────────────────────
+export { proposeResult } from "./proposeResult";
+export type {
+  ProposeResultParams,
+  ProposeResultResult,
+} from "./proposeResult";
+
+export { confirmResult } from "./confirmResult";
+export type {
+  ConfirmResultParams,
+  ConfirmResultResult,
+} from "./confirmResult";
+
+export { disputeResult } from "./disputeResult";
+export type {
+  DisputeResultParams,
+  DisputeResultResult,
+} from "./disputeResult";
+
+export { claimResult } from "./claimResult";
+export type { ClaimResultParams, ClaimResultResult } from "./claimResult";
+
+export { resolveDispute } from "./resolveDispute";
+export type {
+  ResolveDisputeParams,
+  ResolveDisputeResult,
+} from "./resolveDispute";
+
+export { forceClaimDisputed } from "./forceClaimDisputed";
+export type {
+  ForceClaimDisputedParams,
+  ForceClaimDisputedResult,
+} from "./forceClaimDisputed";
+
+// ── VRF seeding (Stage B) ───────────────────────────────────────────────────
+export { requestSeed } from "./requestSeed";
+export type { RequestSeedParams, RequestSeedResult } from "./requestSeed";
+
+export { revealSeed } from "./revealSeed";
+export type { RevealSeedParams, RevealSeedResult } from "./revealSeed";
+
 export { subscribe } from "./subscribe";
 export type {
   SubscribeOptions,

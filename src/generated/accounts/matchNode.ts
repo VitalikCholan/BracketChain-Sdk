@@ -21,6 +21,8 @@ import {
   getBooleanEncoder,
   getBytesDecoder,
   getBytesEncoder,
+  getI64Decoder,
+  getI64Encoder,
   getStructDecoder,
   getStructEncoder,
   getU16Decoder,
@@ -43,8 +45,12 @@ import {
 import {
   getMatchStatusDecoder,
   getMatchStatusEncoder,
+  getProposalSourceDecoder,
+  getProposalSourceEncoder,
   type MatchStatus,
   type MatchStatusArgs,
+  type ProposalSource,
+  type ProposalSourceArgs,
 } from "../types";
 
 export const MATCH_NODE_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([
@@ -58,6 +64,12 @@ export function getMatchNodeDiscriminatorBytes(): ReadonlyUint8Array {
 export type MatchNode = {
   discriminator: ReadonlyUint8Array;
   tournament: Address;
+  /**
+   * Bracket lane this node lives in. `0` for single-elimination (V1). Part
+   * of the PDA seed (C9 schema-prep): future formats add a losers' bracket
+   * (`1`) or per-group lanes without a second redeploy. Always `0` today.
+   */
+  bracket: number;
   round: number;
   matchIndex: number;
   playerA: Address;
@@ -66,10 +78,47 @@ export type MatchNode = {
   status: MatchStatus;
   bye: boolean;
   bump: number;
+  /** Origin of the pending proposal. `None` ⇒ envelope empty. */
+  proposalSource: ProposalSource;
+  /**
+   * Wallet that authored the pending proposal (a match player, or the
+   * oracle's reporter key). `Pubkey::default()` when empty.
+   */
+  proposer: Address;
+  /** Winner asserted by the pending proposal. */
+  proposedWinner: Address;
+  /** Unix time the proposal was recorded. */
+  proposedAt: bigint;
+  /**
+   * Unix time after which a permissionless finalize is allowed. Set to
+   * `proposed_at + dispute_window_secs` on propose; **re-armed** to
+   * `now + FORCE_CLAIM_WINDOW_SECS` (24h) on dispute. The `disputed` flag
+   * selects which permissionless ix may act past it: `claim_result` while
+   * `!disputed`, `force_claim_disputed` while `disputed` (organizer silence
+   * backstop). `resolve_dispute` ignores it — the organizer may act anytime.
+   */
+  claimDeadline: bigint;
+  /**
+   * Set by `dispute_result`; blocks `claim_result` and routes the match to
+   * the organizer arbitrator (`resolve_dispute`), with a 24h
+   * `force_claim_disputed` backstop against organizer silence.
+   */
+  disputed: boolean;
+  /**
+   * Free-form reason code supplied by the disputer (`0` = unspecified).
+   * Surfaced by the indexer's notification kernel; not interpreted on-chain.
+   */
+  disputeReason: number;
 };
 
 export type MatchNodeArgs = {
   tournament: Address;
+  /**
+   * Bracket lane this node lives in. `0` for single-elimination (V1). Part
+   * of the PDA seed (C9 schema-prep): future formats add a losers' bracket
+   * (`1`) or per-group lanes without a second redeploy. Always `0` today.
+   */
+  bracket: number;
   round: number;
   matchIndex: number;
   playerA: Address;
@@ -78,6 +127,37 @@ export type MatchNodeArgs = {
   status: MatchStatusArgs;
   bye: boolean;
   bump: number;
+  /** Origin of the pending proposal. `None` ⇒ envelope empty. */
+  proposalSource: ProposalSourceArgs;
+  /**
+   * Wallet that authored the pending proposal (a match player, or the
+   * oracle's reporter key). `Pubkey::default()` when empty.
+   */
+  proposer: Address;
+  /** Winner asserted by the pending proposal. */
+  proposedWinner: Address;
+  /** Unix time the proposal was recorded. */
+  proposedAt: number | bigint;
+  /**
+   * Unix time after which a permissionless finalize is allowed. Set to
+   * `proposed_at + dispute_window_secs` on propose; **re-armed** to
+   * `now + FORCE_CLAIM_WINDOW_SECS` (24h) on dispute. The `disputed` flag
+   * selects which permissionless ix may act past it: `claim_result` while
+   * `!disputed`, `force_claim_disputed` while `disputed` (organizer silence
+   * backstop). `resolve_dispute` ignores it — the organizer may act anytime.
+   */
+  claimDeadline: number | bigint;
+  /**
+   * Set by `dispute_result`; blocks `claim_result` and routes the match to
+   * the organizer arbitrator (`resolve_dispute`), with a 24h
+   * `force_claim_disputed` backstop against organizer silence.
+   */
+  disputed: boolean;
+  /**
+   * Free-form reason code supplied by the disputer (`0` = unspecified).
+   * Surfaced by the indexer's notification kernel; not interpreted on-chain.
+   */
+  disputeReason: number;
 };
 
 /** Gets the encoder for {@link MatchNodeArgs} account data. */
@@ -86,6 +166,7 @@ export function getMatchNodeEncoder(): FixedSizeEncoder<MatchNodeArgs> {
     getStructEncoder([
       ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
       ["tournament", getAddressEncoder()],
+      ["bracket", getU8Encoder()],
       ["round", getU8Encoder()],
       ["matchIndex", getU16Encoder()],
       ["playerA", getAddressEncoder()],
@@ -94,6 +175,13 @@ export function getMatchNodeEncoder(): FixedSizeEncoder<MatchNodeArgs> {
       ["status", getMatchStatusEncoder()],
       ["bye", getBooleanEncoder()],
       ["bump", getU8Encoder()],
+      ["proposalSource", getProposalSourceEncoder()],
+      ["proposer", getAddressEncoder()],
+      ["proposedWinner", getAddressEncoder()],
+      ["proposedAt", getI64Encoder()],
+      ["claimDeadline", getI64Encoder()],
+      ["disputed", getBooleanEncoder()],
+      ["disputeReason", getU8Encoder()],
     ]),
     (value) => ({ ...value, discriminator: MATCH_NODE_DISCRIMINATOR }),
   );
@@ -104,6 +192,7 @@ export function getMatchNodeDecoder(): FixedSizeDecoder<MatchNode> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
     ["tournament", getAddressDecoder()],
+    ["bracket", getU8Decoder()],
     ["round", getU8Decoder()],
     ["matchIndex", getU16Decoder()],
     ["playerA", getAddressDecoder()],
@@ -112,6 +201,13 @@ export function getMatchNodeDecoder(): FixedSizeDecoder<MatchNode> {
     ["status", getMatchStatusDecoder()],
     ["bye", getBooleanDecoder()],
     ["bump", getU8Decoder()],
+    ["proposalSource", getProposalSourceDecoder()],
+    ["proposer", getAddressDecoder()],
+    ["proposedWinner", getAddressDecoder()],
+    ["proposedAt", getI64Decoder()],
+    ["claimDeadline", getI64Decoder()],
+    ["disputed", getBooleanDecoder()],
+    ["disputeReason", getU8Decoder()],
   ]);
 }
 
@@ -174,5 +270,5 @@ export async function fetchAllMaybeMatchNode(
 }
 
 export function getMatchNodeSize(): number {
-  return 142;
+  return 226;
 }

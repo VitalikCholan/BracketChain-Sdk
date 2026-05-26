@@ -17,6 +17,7 @@ import {
   SOLANA_ERROR__PROGRAM_CLIENTS__UNRECOGNIZED_INSTRUCTION_TYPE,
   SolanaError,
   type Address,
+  type ClientWithPayer,
   type ClientWithRpc,
   type ClientWithTransactionPlanning,
   type ClientWithTransactionSending,
@@ -48,28 +49,68 @@ import {
 } from "../accounts";
 import {
   getCancelTournamentInstructionAsync,
+  getClaimResultInstructionAsync,
+  getConfirmResultInstructionAsync,
   getCreateTournamentInstructionAsync,
+  getDisputeResultInstruction,
+  getForceClaimDisputedInstructionAsync,
   getInitializeProtocolInstructionAsync,
   getJoinTournamentInstructionAsync,
+  getMigrateV1TournamentInstructionAsync,
+  getProposeResultInstruction,
   getReportResultInstructionAsync,
+  getRequestSeedInstruction,
+  getResolveDisputeInstructionAsync,
+  getRevealSeedInstruction,
+  getSetSasConfigInstructionAsync,
   getStartTournamentInstruction,
   parseCancelTournamentInstruction,
+  parseClaimResultInstruction,
+  parseConfirmResultInstruction,
   parseCreateTournamentInstruction,
+  parseDisputeResultInstruction,
+  parseForceClaimDisputedInstruction,
   parseInitializeProtocolInstruction,
   parseJoinTournamentInstruction,
+  parseMigrateV1TournamentInstruction,
+  parseProposeResultInstruction,
   parseReportResultInstruction,
+  parseRequestSeedInstruction,
+  parseResolveDisputeInstruction,
+  parseRevealSeedInstruction,
+  parseSetSasConfigInstruction,
   parseStartTournamentInstruction,
   type CancelTournamentAsyncInput,
+  type ClaimResultAsyncInput,
+  type ConfirmResultAsyncInput,
   type CreateTournamentAsyncInput,
+  type DisputeResultInput,
+  type ForceClaimDisputedAsyncInput,
   type InitializeProtocolAsyncInput,
   type JoinTournamentAsyncInput,
+  type MigrateV1TournamentAsyncInput,
   type ParsedCancelTournamentInstruction,
+  type ParsedClaimResultInstruction,
+  type ParsedConfirmResultInstruction,
   type ParsedCreateTournamentInstruction,
+  type ParsedDisputeResultInstruction,
+  type ParsedForceClaimDisputedInstruction,
   type ParsedInitializeProtocolInstruction,
   type ParsedJoinTournamentInstruction,
+  type ParsedMigrateV1TournamentInstruction,
+  type ParsedProposeResultInstruction,
   type ParsedReportResultInstruction,
+  type ParsedRequestSeedInstruction,
+  type ParsedResolveDisputeInstruction,
+  type ParsedRevealSeedInstruction,
+  type ParsedSetSasConfigInstruction,
   type ParsedStartTournamentInstruction,
+  type ProposeResultInput,
   type ReportResultAsyncInput,
+  type RequestSeedInput,
+  type ResolveDisputeAsyncInput,
+  type RevealSeedInput,
+  type SetSasConfigAsyncInput,
   type StartTournamentInput,
 } from "../instructions";
 import {
@@ -80,7 +121,7 @@ import {
 } from "../pdas";
 
 export const BRACKET_CHAIN_PROGRAM_ADDRESS =
-  "AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1" as Address<"AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1">;
+  "3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ" as Address<"3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ">;
 
 export enum BracketChainAccount {
   MatchNode,
@@ -145,10 +186,20 @@ export function identifyBracketChainAccount(
 
 export enum BracketChainInstruction {
   CancelTournament,
+  ClaimResult,
+  ConfirmResult,
   CreateTournament,
+  DisputeResult,
+  ForceClaimDisputed,
   InitializeProtocol,
   JoinTournament,
+  MigrateV1Tournament,
+  ProposeResult,
   ReportResult,
+  RequestSeed,
+  ResolveDispute,
+  RevealSeed,
+  SetSasConfig,
   StartTournament,
 }
 
@@ -171,12 +222,56 @@ export function identifyBracketChainInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([249, 224, 240, 229, 107, 95, 235, 65]),
+      ),
+      0,
+    )
+  ) {
+    return BracketChainInstruction.ClaimResult;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([221, 146, 199, 188, 131, 67, 148, 74]),
+      ),
+      0,
+    )
+  ) {
+    return BracketChainInstruction.ConfirmResult;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([158, 137, 233, 231, 73, 132, 191, 68]),
       ),
       0,
     )
   ) {
     return BracketChainInstruction.CreateTournament;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([123, 38, 138, 180, 219, 102, 23, 181]),
+      ),
+      0,
+    )
+  ) {
+    return BracketChainInstruction.DisputeResult;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([167, 247, 131, 146, 127, 142, 78, 234]),
+      ),
+      0,
+    )
+  ) {
+    return BracketChainInstruction.ForceClaimDisputed;
   }
   if (
     containsBytes(
@@ -204,12 +299,78 @@ export function identifyBracketChainInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([219, 127, 239, 216, 243, 241, 10, 173]),
+      ),
+      0,
+    )
+  ) {
+    return BracketChainInstruction.MigrateV1Tournament;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([7, 96, 132, 38, 128, 145, 133, 242]),
+      ),
+      0,
+    )
+  ) {
+    return BracketChainInstruction.ProposeResult;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([195, 187, 161, 107, 75, 154, 102, 183]),
       ),
       0,
     )
   ) {
     return BracketChainInstruction.ReportResult;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([162, 96, 174, 50, 178, 77, 115, 152]),
+      ),
+      0,
+    )
+  ) {
+    return BracketChainInstruction.RequestSeed;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([231, 6, 202, 6, 96, 103, 12, 230]),
+      ),
+      0,
+    )
+  ) {
+    return BracketChainInstruction.ResolveDispute;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([196, 119, 194, 112, 156, 211, 239, 105]),
+      ),
+      0,
+    )
+  ) {
+    return BracketChainInstruction.RevealSeed;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([187, 112, 163, 60, 214, 195, 226, 187]),
+      ),
+      0,
+    )
+  ) {
+    return BracketChainInstruction.SetSasConfig;
   }
   if (
     containsBytes(
@@ -229,14 +390,26 @@ export function identifyBracketChainInstruction(
 }
 
 export type ParsedBracketChainInstruction<
-  TProgram extends string = "AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1",
+  TProgram extends string = "3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ",
 > =
   | ({
       instructionType: BracketChainInstruction.CancelTournament;
     } & ParsedCancelTournamentInstruction<TProgram>)
   | ({
+      instructionType: BracketChainInstruction.ClaimResult;
+    } & ParsedClaimResultInstruction<TProgram>)
+  | ({
+      instructionType: BracketChainInstruction.ConfirmResult;
+    } & ParsedConfirmResultInstruction<TProgram>)
+  | ({
       instructionType: BracketChainInstruction.CreateTournament;
     } & ParsedCreateTournamentInstruction<TProgram>)
+  | ({
+      instructionType: BracketChainInstruction.DisputeResult;
+    } & ParsedDisputeResultInstruction<TProgram>)
+  | ({
+      instructionType: BracketChainInstruction.ForceClaimDisputed;
+    } & ParsedForceClaimDisputedInstruction<TProgram>)
   | ({
       instructionType: BracketChainInstruction.InitializeProtocol;
     } & ParsedInitializeProtocolInstruction<TProgram>)
@@ -244,8 +417,26 @@ export type ParsedBracketChainInstruction<
       instructionType: BracketChainInstruction.JoinTournament;
     } & ParsedJoinTournamentInstruction<TProgram>)
   | ({
+      instructionType: BracketChainInstruction.MigrateV1Tournament;
+    } & ParsedMigrateV1TournamentInstruction<TProgram>)
+  | ({
+      instructionType: BracketChainInstruction.ProposeResult;
+    } & ParsedProposeResultInstruction<TProgram>)
+  | ({
       instructionType: BracketChainInstruction.ReportResult;
     } & ParsedReportResultInstruction<TProgram>)
+  | ({
+      instructionType: BracketChainInstruction.RequestSeed;
+    } & ParsedRequestSeedInstruction<TProgram>)
+  | ({
+      instructionType: BracketChainInstruction.ResolveDispute;
+    } & ParsedResolveDisputeInstruction<TProgram>)
+  | ({
+      instructionType: BracketChainInstruction.RevealSeed;
+    } & ParsedRevealSeedInstruction<TProgram>)
+  | ({
+      instructionType: BracketChainInstruction.SetSasConfig;
+    } & ParsedSetSasConfigInstruction<TProgram>)
   | ({
       instructionType: BracketChainInstruction.StartTournament;
     } & ParsedStartTournamentInstruction<TProgram>);
@@ -262,11 +453,39 @@ export function parseBracketChainInstruction<TProgram extends string>(
         ...parseCancelTournamentInstruction(instruction),
       };
     }
+    case BracketChainInstruction.ClaimResult: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: BracketChainInstruction.ClaimResult,
+        ...parseClaimResultInstruction(instruction),
+      };
+    }
+    case BracketChainInstruction.ConfirmResult: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: BracketChainInstruction.ConfirmResult,
+        ...parseConfirmResultInstruction(instruction),
+      };
+    }
     case BracketChainInstruction.CreateTournament: {
       assertIsInstructionWithAccounts(instruction);
       return {
         instructionType: BracketChainInstruction.CreateTournament,
         ...parseCreateTournamentInstruction(instruction),
+      };
+    }
+    case BracketChainInstruction.DisputeResult: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: BracketChainInstruction.DisputeResult,
+        ...parseDisputeResultInstruction(instruction),
+      };
+    }
+    case BracketChainInstruction.ForceClaimDisputed: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: BracketChainInstruction.ForceClaimDisputed,
+        ...parseForceClaimDisputedInstruction(instruction),
       };
     }
     case BracketChainInstruction.InitializeProtocol: {
@@ -283,11 +502,53 @@ export function parseBracketChainInstruction<TProgram extends string>(
         ...parseJoinTournamentInstruction(instruction),
       };
     }
+    case BracketChainInstruction.MigrateV1Tournament: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: BracketChainInstruction.MigrateV1Tournament,
+        ...parseMigrateV1TournamentInstruction(instruction),
+      };
+    }
+    case BracketChainInstruction.ProposeResult: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: BracketChainInstruction.ProposeResult,
+        ...parseProposeResultInstruction(instruction),
+      };
+    }
     case BracketChainInstruction.ReportResult: {
       assertIsInstructionWithAccounts(instruction);
       return {
         instructionType: BracketChainInstruction.ReportResult,
         ...parseReportResultInstruction(instruction),
+      };
+    }
+    case BracketChainInstruction.RequestSeed: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: BracketChainInstruction.RequestSeed,
+        ...parseRequestSeedInstruction(instruction),
+      };
+    }
+    case BracketChainInstruction.ResolveDispute: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: BracketChainInstruction.ResolveDispute,
+        ...parseResolveDisputeInstruction(instruction),
+      };
+    }
+    case BracketChainInstruction.RevealSeed: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: BracketChainInstruction.RevealSeed,
+        ...parseRevealSeedInstruction(instruction),
+      };
+    }
+    case BracketChainInstruction.SetSasConfig: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: BracketChainInstruction.SetSasConfig,
+        ...parseSetSasConfigInstruction(instruction),
       };
     }
     case BracketChainInstruction.StartTournament: {
@@ -330,9 +591,25 @@ export type BracketChainPluginInstructions = {
     input: CancelTournamentAsyncInput,
   ) => ReturnType<typeof getCancelTournamentInstructionAsync> &
     SelfPlanAndSendFunctions;
+  claimResult: (
+    input: MakeOptional<ClaimResultAsyncInput, "payer">,
+  ) => ReturnType<typeof getClaimResultInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  confirmResult: (
+    input: ConfirmResultAsyncInput,
+  ) => ReturnType<typeof getConfirmResultInstructionAsync> &
+    SelfPlanAndSendFunctions;
   createTournament: (
     input: CreateTournamentAsyncInput,
   ) => ReturnType<typeof getCreateTournamentInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  disputeResult: (
+    input: DisputeResultInput,
+  ) => ReturnType<typeof getDisputeResultInstruction> &
+    SelfPlanAndSendFunctions;
+  forceClaimDisputed: (
+    input: MakeOptional<ForceClaimDisputedAsyncInput, "payer">,
+  ) => ReturnType<typeof getForceClaimDisputedInstructionAsync> &
     SelfPlanAndSendFunctions;
   initializeProtocol: (
     input: InitializeProtocolAsyncInput,
@@ -342,9 +619,31 @@ export type BracketChainPluginInstructions = {
     input: JoinTournamentAsyncInput,
   ) => ReturnType<typeof getJoinTournamentInstructionAsync> &
     SelfPlanAndSendFunctions;
+  migrateV1Tournament: (
+    input: MigrateV1TournamentAsyncInput,
+  ) => ReturnType<typeof getMigrateV1TournamentInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  proposeResult: (
+    input: ProposeResultInput,
+  ) => ReturnType<typeof getProposeResultInstruction> &
+    SelfPlanAndSendFunctions;
   reportResult: (
     input: ReportResultAsyncInput,
   ) => ReturnType<typeof getReportResultInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  requestSeed: (
+    input: RequestSeedInput,
+  ) => ReturnType<typeof getRequestSeedInstruction> & SelfPlanAndSendFunctions;
+  resolveDispute: (
+    input: ResolveDisputeAsyncInput,
+  ) => ReturnType<typeof getResolveDisputeInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  revealSeed: (
+    input: MakeOptional<RevealSeedInput, "payer">,
+  ) => ReturnType<typeof getRevealSeedInstruction> & SelfPlanAndSendFunctions;
+  setSasConfig: (
+    input: SetSasConfigAsyncInput,
+  ) => ReturnType<typeof getSetSasConfigInstructionAsync> &
     SelfPlanAndSendFunctions;
   startTournament: (
     input: StartTournamentInput,
@@ -362,6 +661,7 @@ export type BracketChainPluginPdas = {
 export type BracketChainPluginRequirements = ClientWithRpc<
   GetAccountInfoApi & GetMultipleAccountsApi
 > &
+  ClientWithPayer &
   ClientWithTransactionPlanning &
   ClientWithTransactionSending;
 
@@ -386,10 +686,36 @@ export function bracketChainProgram() {
               client,
               getCancelTournamentInstructionAsync(input),
             ),
+          claimResult: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getClaimResultInstructionAsync({
+                ...input,
+                payer: input.payer ?? client.payer,
+              }),
+            ),
+          confirmResult: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getConfirmResultInstructionAsync(input),
+            ),
           createTournament: (input) =>
             addSelfPlanAndSendFunctions(
               client,
               getCreateTournamentInstructionAsync(input),
+            ),
+          disputeResult: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getDisputeResultInstruction(input),
+            ),
+          forceClaimDisputed: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getForceClaimDisputedInstructionAsync({
+                ...input,
+                payer: input.payer ?? client.payer,
+              }),
             ),
           initializeProtocol: (input) =>
             addSelfPlanAndSendFunctions(
@@ -401,10 +727,43 @@ export function bracketChainProgram() {
               client,
               getJoinTournamentInstructionAsync(input),
             ),
+          migrateV1Tournament: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getMigrateV1TournamentInstructionAsync(input),
+            ),
+          proposeResult: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getProposeResultInstruction(input),
+            ),
           reportResult: (input) =>
             addSelfPlanAndSendFunctions(
               client,
               getReportResultInstructionAsync(input),
+            ),
+          requestSeed: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getRequestSeedInstruction(input),
+            ),
+          resolveDispute: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getResolveDisputeInstructionAsync(input),
+            ),
+          revealSeed: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getRevealSeedInstruction({
+                ...input,
+                payer: input.payer ?? client.payer,
+              }),
+            ),
+          setSasConfig: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getSetSasConfigInstructionAsync(input),
             ),
           startTournament: (input) =>
             addSelfPlanAndSendFunctions(
@@ -422,3 +781,5 @@ export function bracketChainProgram() {
     });
   };
 }
+
+type MakeOptional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;

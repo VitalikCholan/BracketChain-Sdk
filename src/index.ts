@@ -44,12 +44,23 @@ export type {
 } from "./types";
 
 // Enums — exported as values so consumers can compare with `===`.
-export { MatchStatus, PayoutPreset, TournamentStatus } from "./types";
+export {
+  MatchStatus,
+  PayoutPreset,
+  ProposalSource,
+  SettlementMode,
+  SupportedGame,
+  TournamentStatus,
+} from "./types";
 
 // Methods — reads + mutations
 export {
   createTournament,
   cancelTournament,
+  claimResult,
+  confirmResult,
+  disputeResult,
+  forceClaimDisputed,
   getAllMatches,
   getMatch,
   getParticipant,
@@ -59,19 +70,39 @@ export {
   joinTournament,
   listParticipants,
   listTournaments,
+  proposeResult,
   reportResult,
+  requestSeed,
+  resolveDispute,
+  revealSeed,
   startTournament,
   subscribe,
 } from "./methods";
 export type {
   CancelTournamentParams,
   CancelTournamentResult,
+  ClaimResultParams,
+  ClaimResultResult,
+  ConfirmResultParams,
+  ConfirmResultResult,
   CreateTournamentConfig,
   CreateTournamentResult,
+  DisputeResultParams,
+  DisputeResultResult,
+  ForceClaimDisputedParams,
+  ForceClaimDisputedResult,
   JoinTournamentParams,
   JoinTournamentResult,
+  ProposeResultParams,
+  ProposeResultResult,
   ReportResultParams,
   ReportResultResult,
+  RequestSeedParams,
+  RequestSeedResult,
+  ResolveDisputeParams,
+  ResolveDisputeResult,
+  RevealSeedParams,
+  RevealSeedResult,
   StartTournamentParams,
   StartTournamentResult,
   SubscribeOptions,

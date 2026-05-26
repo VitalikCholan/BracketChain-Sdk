@@ -53,10 +53,18 @@ import {
 import {
   getPayoutPresetDecoder,
   getPayoutPresetEncoder,
+  getSettlementModeDecoder,
+  getSettlementModeEncoder,
+  getSupportedGameDecoder,
+  getSupportedGameEncoder,
   getTournamentStatusDecoder,
   getTournamentStatusEncoder,
   type PayoutPreset,
   type PayoutPresetArgs,
+  type SettlementMode,
+  type SettlementModeArgs,
+  type SupportedGame,
+  type SupportedGameArgs,
   type TournamentStatus,
   type TournamentStatusArgs,
 } from "../types";
@@ -81,16 +89,18 @@ export type Tournament = {
   vault: Address;
   entryFee: bigint;
   /**
-   * Optional organizer top-up to the prize pool, transferred into the vault
-   * at creation. `0` is allowed. Refunded back to the organizer if the
-   * tournament is cancelled before the first match. On completion, it stays
-   * in the vault and is distributed as part of the prize pool (Variant B).
+   * Optional organizer top-up transferred into the vault at creation.
+   * `0` is allowed. Treated as a refundable commitment (Variant A):
+   * returned to the organizer on `cancel_tournament` (pre-start) AND on
+   * `report_result` final-match. The deposit is excluded from the
+   * prize-pool basis — protocol fee + placement payouts apply to
+   * `vault.amount - organizer_deposit` only.
    */
   organizerDeposit: bigint;
   /**
-   * Tracks whether the organizer's deposit refund has been issued during a
-   * cancellation. Independent of per-participant `refund_paid` flags so the
-   * two paths can be processed in any order across cancel chunks.
+   * Set true once the deposit has been refunded — by `cancel_tournament`
+   * (any-call, idempotent across chunks) or by `report_result` final-match.
+   * Independent of per-participant `refund_paid` flags.
    */
   organizerDepositRefunded: boolean;
   maxParticipants: number;
@@ -109,6 +119,24 @@ export type Tournament = {
   champion: Address;
   bump: number;
   vaultBump: number;
+  /** Game played; gates SAS identity requirement at `join_tournament`. */
+  game: SupportedGame;
+  /** Who may report results. Locked at create-time. */
+  settlementMode: SettlementMode;
+  /**
+   * Dispute window (seconds) for PlayerReported / Oracle settlement. Unused
+   * by OrganizerOnly. Wired by the V1 player-reported stage of this redeploy.
+   */
+  disputeWindowSecs: number;
+  /** Switchboard randomness account committed via `request_seed` (VRF stage). */
+  vrfRandomnessAccount: Address;
+  /** Slot the VRF commitment was made at; `reveal_seed` reads after it passes. */
+  vrfCommitSlot: bigint;
+  /**
+   * True once `reveal_seed` has populated `seed_hash` from VRF. Gates
+   * `start_tournament` for non-OrganizerOnly tournaments.
+   */
+  seedRevealed: boolean;
 };
 
 export type TournamentArgs = {
@@ -122,16 +150,18 @@ export type TournamentArgs = {
   vault: Address;
   entryFee: number | bigint;
   /**
-   * Optional organizer top-up to the prize pool, transferred into the vault
-   * at creation. `0` is allowed. Refunded back to the organizer if the
-   * tournament is cancelled before the first match. On completion, it stays
-   * in the vault and is distributed as part of the prize pool (Variant B).
+   * Optional organizer top-up transferred into the vault at creation.
+   * `0` is allowed. Treated as a refundable commitment (Variant A):
+   * returned to the organizer on `cancel_tournament` (pre-start) AND on
+   * `report_result` final-match. The deposit is excluded from the
+   * prize-pool basis — protocol fee + placement payouts apply to
+   * `vault.amount - organizer_deposit` only.
    */
   organizerDeposit: number | bigint;
   /**
-   * Tracks whether the organizer's deposit refund has been issued during a
-   * cancellation. Independent of per-participant `refund_paid` flags so the
-   * two paths can be processed in any order across cancel chunks.
+   * Set true once the deposit has been refunded — by `cancel_tournament`
+   * (any-call, idempotent across chunks) or by `report_result` final-match.
+   * Independent of per-participant `refund_paid` flags.
    */
   organizerDepositRefunded: boolean;
   maxParticipants: number;
@@ -150,6 +180,24 @@ export type TournamentArgs = {
   champion: Address;
   bump: number;
   vaultBump: number;
+  /** Game played; gates SAS identity requirement at `join_tournament`. */
+  game: SupportedGameArgs;
+  /** Who may report results. Locked at create-time. */
+  settlementMode: SettlementModeArgs;
+  /**
+   * Dispute window (seconds) for PlayerReported / Oracle settlement. Unused
+   * by OrganizerOnly. Wired by the V1 player-reported stage of this redeploy.
+   */
+  disputeWindowSecs: number;
+  /** Switchboard randomness account committed via `request_seed` (VRF stage). */
+  vrfRandomnessAccount: Address;
+  /** Slot the VRF commitment was made at; `reveal_seed` reads after it passes. */
+  vrfCommitSlot: number | bigint;
+  /**
+   * True once `reveal_seed` has populated `seed_hash` from VRF. Gates
+   * `start_tournament` for non-OrganizerOnly tournaments.
+   */
+  seedRevealed: boolean;
 };
 
 /** Gets the encoder for {@link TournamentArgs} account data. */
@@ -180,6 +228,12 @@ export function getTournamentEncoder(): Encoder<TournamentArgs> {
       ["champion", getAddressEncoder()],
       ["bump", getU8Encoder()],
       ["vaultBump", getU8Encoder()],
+      ["game", getSupportedGameEncoder()],
+      ["settlementMode", getSettlementModeEncoder()],
+      ["disputeWindowSecs", getU32Encoder()],
+      ["vrfRandomnessAccount", getAddressEncoder()],
+      ["vrfCommitSlot", getU64Encoder()],
+      ["seedRevealed", getBooleanEncoder()],
     ]),
     (value) => ({ ...value, discriminator: TOURNAMENT_DISCRIMINATOR }),
   );
@@ -212,6 +266,12 @@ export function getTournamentDecoder(): Decoder<Tournament> {
     ["champion", getAddressDecoder()],
     ["bump", getU8Decoder()],
     ["vaultBump", getU8Decoder()],
+    ["game", getSupportedGameDecoder()],
+    ["settlementMode", getSettlementModeDecoder()],
+    ["disputeWindowSecs", getU32Decoder()],
+    ["vrfRandomnessAccount", getAddressDecoder()],
+    ["vrfCommitSlot", getU64Decoder()],
+    ["seedRevealed", getBooleanDecoder()],
   ]);
 }
 

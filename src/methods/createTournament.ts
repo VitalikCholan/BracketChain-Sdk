@@ -29,8 +29,13 @@ import {
   findVaultPda,
   getCreateTournamentInstructionAsync,
   PayoutPreset,
+  SettlementMode,
+  SupportedGame,
 } from "../generated";
 import { assertSigner, sendInstructions } from "./_send";
+
+/** Default dispute window for player-reported / oracle settlement (1 hour). */
+const DEFAULT_DISPUTE_WINDOW_SECS = 3600;
 
 // On-chain bounds — must mirror `bracket-chain-programs/src/constants.rs`.
 const MAX_TOURNAMENT_NAME_BYTES = 32;
@@ -66,6 +71,23 @@ export interface CreateTournamentConfig {
    * missing) and transfers the deposit into the vault on the same tx.
    */
   organizerDeposit?: bigint | number;
+  /**
+   * Game this tournament is played in (V1.1). Defaults to `SupportedGame.Manual`.
+   * Phase 1 supports `Manual` + `Dota2` only — `Cs2Faceit`/`Valorant`/`LoL`
+   * are rejected on-chain with `GameNotYetSupported`.
+   */
+  game?: SupportedGame;
+  /**
+   * Who reports match results (V1.1). Defaults to `SettlementMode.OrganizerOnly`.
+   * `PlayerReported` / `Oracle` open the propose/dispute/claim flow and (for
+   * verifiable seeding) expect the organizer to call `requestSeed` before start.
+   */
+  settlementMode?: SettlementMode;
+  /**
+   * Dispute window in seconds for player-reported / oracle proposals. Defaults
+   * to 1 hour. Ignored by `OrganizerOnly` tournaments.
+   */
+  disputeWindowSecs?: number;
 }
 
 export interface CreateTournamentResult {
@@ -209,6 +231,9 @@ export async function createTournament(
     payoutPreset: config.payoutPreset,
     registrationDeadline,
     organizerDeposit,
+    game: config.game ?? SupportedGame.Manual,
+    settlementMode: config.settlementMode ?? SettlementMode.OrganizerOnly,
+    disputeWindowSecs: config.disputeWindowSecs ?? DEFAULT_DISPUTE_WINDOW_SECS,
   });
 
   try {

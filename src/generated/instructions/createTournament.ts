@@ -59,8 +59,16 @@ import { BRACKET_CHAIN_PROGRAM_ADDRESS } from "../programs";
 import {
   getPayoutPresetDecoder,
   getPayoutPresetEncoder,
+  getSettlementModeDecoder,
+  getSettlementModeEncoder,
+  getSupportedGameDecoder,
+  getSupportedGameEncoder,
   type PayoutPreset,
   type PayoutPresetArgs,
+  type SettlementMode,
+  type SettlementModeArgs,
+  type SupportedGame,
+  type SupportedGameArgs,
 } from "../types";
 
 export const CREATE_TOURNAMENT_DISCRIMINATOR: ReadonlyUint8Array =
@@ -131,6 +139,9 @@ export type CreateTournamentInstructionData = {
   payoutPreset: PayoutPreset;
   registrationDeadline: bigint;
   organizerDeposit: bigint;
+  game: SupportedGame;
+  settlementMode: SettlementMode;
+  disputeWindowSecs: number;
 };
 
 export type CreateTournamentInstructionDataArgs = {
@@ -140,6 +151,9 @@ export type CreateTournamentInstructionDataArgs = {
   payoutPreset: PayoutPresetArgs;
   registrationDeadline: number | bigint;
   organizerDeposit: number | bigint;
+  game: SupportedGameArgs;
+  settlementMode: SettlementModeArgs;
+  disputeWindowSecs: number;
 };
 
 export function getCreateTournamentInstructionDataEncoder(): Encoder<CreateTournamentInstructionDataArgs> {
@@ -152,6 +166,9 @@ export function getCreateTournamentInstructionDataEncoder(): Encoder<CreateTourn
       ["payoutPreset", getPayoutPresetEncoder()],
       ["registrationDeadline", getI64Encoder()],
       ["organizerDeposit", getU64Encoder()],
+      ["game", getSupportedGameEncoder()],
+      ["settlementMode", getSettlementModeEncoder()],
+      ["disputeWindowSecs", getU32Encoder()],
     ]),
     (value) => ({ ...value, discriminator: CREATE_TOURNAMENT_DISCRIMINATOR }),
   );
@@ -166,6 +183,9 @@ export function getCreateTournamentInstructionDataDecoder(): Decoder<CreateTourn
     ["payoutPreset", getPayoutPresetDecoder()],
     ["registrationDeadline", getI64Decoder()],
     ["organizerDeposit", getU64Decoder()],
+    ["game", getSupportedGameDecoder()],
+    ["settlementMode", getSettlementModeDecoder()],
+    ["disputeWindowSecs", getU32Decoder()],
   ]);
 }
 
@@ -224,6 +244,9 @@ export type CreateTournamentAsyncInput<
   payoutPreset: CreateTournamentInstructionDataArgs["payoutPreset"];
   registrationDeadline: CreateTournamentInstructionDataArgs["registrationDeadline"];
   organizerDeposit: CreateTournamentInstructionDataArgs["organizerDeposit"];
+  game: CreateTournamentInstructionDataArgs["game"];
+  settlementMode: CreateTournamentInstructionDataArgs["settlementMode"];
+  disputeWindowSecs: CreateTournamentInstructionDataArgs["disputeWindowSecs"];
 };
 
 export async function getCreateTournamentInstructionAsync<
@@ -401,6 +424,9 @@ export type CreateTournamentInput<
   payoutPreset: CreateTournamentInstructionDataArgs["payoutPreset"];
   registrationDeadline: CreateTournamentInstructionDataArgs["registrationDeadline"];
   organizerDeposit: CreateTournamentInstructionDataArgs["organizerDeposit"];
+  game: CreateTournamentInstructionDataArgs["game"];
+  settlementMode: CreateTournamentInstructionDataArgs["settlementMode"];
+  disputeWindowSecs: CreateTournamentInstructionDataArgs["disputeWindowSecs"];
 };
 
 export function getCreateTournamentInstruction<

@@ -10,4 +10,7 @@ export * from "./matchInitDescriptor";
 export * from "./matchStatus";
 export * from "./payoutPreset";
 export * from "./placementPayout";
+export * from "./proposalSource";
+export * from "./settlementMode";
+export * from "./supportedGame";
 export * from "./tournamentStatus";

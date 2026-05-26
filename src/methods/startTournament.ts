@@ -230,10 +230,12 @@ async function buildBracketDescriptors(
 
     const [pda, bump] = await findMatchPda({
       tournament,
+      bracket: 0,
       round: 0,
       matchIndex: m,
     });
     descriptors.push({
+      bracket: 0,
       round: 0,
       matchIndex: m,
       bump,
@@ -257,10 +259,12 @@ async function buildBracketDescriptors(
       }
       const [pda, bump] = await findMatchPda({
         tournament,
+        bracket: 0,
         round: r,
         matchIndex: m,
       });
       descriptors.push({
+        bracket: 0,
         round: r,
         matchIndex: m,
         bump,

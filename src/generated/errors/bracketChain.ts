@@ -62,60 +62,160 @@ export const BRACKET_CHAIN_ERROR__REMAINING_ACCOUNTS_MISMATCH = 0x1785; // 6021
 export const BRACKET_CHAIN_ERROR__ARITHMETIC_OVERFLOW = 0x1786; // 6022
 /** SlotHashesUnavailable: slot_hashes sysvar is empty; cannot derive seed */
 export const BRACKET_CHAIN_ERROR__SLOT_HASHES_UNAVAILABLE = 0x1787; // 6023
+/** GameNotYetSupported: Selected game is not yet supported for tournament creation */
+export const BRACKET_CHAIN_ERROR__GAME_NOT_YET_SUPPORTED = 0x1788; // 6024
+/** AttestationRequired: This game requires a SAS identity attestation to join */
+export const BRACKET_CHAIN_ERROR__ATTESTATION_REQUIRED = 0x1789; // 6025
+/** InvalidAttestationOwner: Attestation account is not owned by the SAS program */
+export const BRACKET_CHAIN_ERROR__INVALID_ATTESTATION_OWNER = 0x178a; // 6026
+/** WrongAttestationCredential: Attestation credential does not match the protocol's SAS credential */
+export const BRACKET_CHAIN_ERROR__WRONG_ATTESTATION_CREDENTIAL = 0x178b; // 6027
+/** WrongAttestationSchema: Attestation schema does not match the game's SAS schema */
+export const BRACKET_CHAIN_ERROR__WRONG_ATTESTATION_SCHEMA = 0x178c; // 6028
+/** AttestationWalletMismatch: Attestation nonce does not bind to the joining wallet */
+export const BRACKET_CHAIN_ERROR__ATTESTATION_WALLET_MISMATCH = 0x178d; // 6029
+/** AttestationExpired: Attestation has expired */
+export const BRACKET_CHAIN_ERROR__ATTESTATION_EXPIRED = 0x178e; // 6030
+/** MalformedAttestation: Attestation account data is malformed */
+export const BRACKET_CHAIN_ERROR__MALFORMED_ATTESTATION = 0x178f; // 6031
+/** SettlementModeMismatch: This action is not allowed for the tournament's settlement mode */
+export const BRACKET_CHAIN_ERROR__SETTLEMENT_MODE_MISMATCH = 0x1790; // 6032
+/** NotPlayerInMatch: Signer is not a player in this match */
+export const BRACKET_CHAIN_ERROR__NOT_PLAYER_IN_MATCH = 0x1791; // 6033
+/** NotCounterparty: Only the counterparty may confirm or dispute this proposal */
+export const BRACKET_CHAIN_ERROR__NOT_COUNTERPARTY = 0x1792; // 6034
+/** NoProposal: Match has no pending proposal */
+export const BRACKET_CHAIN_ERROR__NO_PROPOSAL = 0x1793; // 6035
+/** ProposalAlreadyExists: Match already has a pending proposal */
+export const BRACKET_CHAIN_ERROR__PROPOSAL_ALREADY_EXISTS = 0x1794; // 6036
+/** InvalidProposedWinner: Proposed winner is not a player in this match */
+export const BRACKET_CHAIN_ERROR__INVALID_PROPOSED_WINNER = 0x1795; // 6037
+/** ClaimWindowNotElapsed: Claim window has not elapsed yet */
+export const BRACKET_CHAIN_ERROR__CLAIM_WINDOW_NOT_ELAPSED = 0x1796; // 6038
+/** ProposalDisputed: Proposal is disputed; it cannot be claimed */
+export const BRACKET_CHAIN_ERROR__PROPOSAL_DISPUTED = 0x1797; // 6039
+/** ProposalNotDisputed: Proposal is not disputed */
+export const BRACKET_CHAIN_ERROR__PROPOSAL_NOT_DISPUTED = 0x1798; // 6040
+/** SeedNotRevealed: Tournament seed has not been revealed; start is gated on VRF */
+export const BRACKET_CHAIN_ERROR__SEED_NOT_REVEALED = 0x1799; // 6041
+/** RandomnessNotResolved: Switchboard randomness is not yet resolved for this slot */
+export const BRACKET_CHAIN_ERROR__RANDOMNESS_NOT_RESOLVED = 0x179a; // 6042
+/** RandomnessAccountMismatch: Provided randomness account does not match the tournament commitment */
+export const BRACKET_CHAIN_ERROR__RANDOMNESS_ACCOUNT_MISMATCH = 0x179b; // 6043
+/** InvalidRandomnessOwner: Randomness account is not owned by the Switchboard On-Demand program */
+export const BRACKET_CHAIN_ERROR__INVALID_RANDOMNESS_OWNER = 0x179c; // 6044
+/** MalformedRandomness: Randomness account data is malformed */
+export const BRACKET_CHAIN_ERROR__MALFORMED_RANDOMNESS = 0x179d; // 6045
+/** SeedAlreadyRevealed: Tournament seed has already been revealed */
+export const BRACKET_CHAIN_ERROR__SEED_ALREADY_REVEALED = 0x179e; // 6046
+/** InvalidTournamentAccount: Account is not a Tournament owned by this program */
+export const BRACKET_CHAIN_ERROR__INVALID_TOURNAMENT_ACCOUNT = 0x179f; // 6047
+/** MigrationNotNeeded: Tournament account is already at the V1 layout; migration not needed */
+export const BRACKET_CHAIN_ERROR__MIGRATION_NOT_NEEDED = 0x17a0; // 6048
 
 export type BracketChainError =
   | typeof BRACKET_CHAIN_ERROR__ALREADY_REGISTERED
   | typeof BRACKET_CHAIN_ERROR__ARITHMETIC_OVERFLOW
+  | typeof BRACKET_CHAIN_ERROR__ATTESTATION_EXPIRED
+  | typeof BRACKET_CHAIN_ERROR__ATTESTATION_REQUIRED
+  | typeof BRACKET_CHAIN_ERROR__ATTESTATION_WALLET_MISMATCH
+  | typeof BRACKET_CHAIN_ERROR__CLAIM_WINDOW_NOT_ELAPSED
+  | typeof BRACKET_CHAIN_ERROR__GAME_NOT_YET_SUPPORTED
+  | typeof BRACKET_CHAIN_ERROR__INVALID_ATTESTATION_OWNER
   | typeof BRACKET_CHAIN_ERROR__INVALID_MATCH_INDEX
   | typeof BRACKET_CHAIN_ERROR__INVALID_PAYOUT_PRESET
+  | typeof BRACKET_CHAIN_ERROR__INVALID_PROPOSED_WINNER
+  | typeof BRACKET_CHAIN_ERROR__INVALID_RANDOMNESS_OWNER
   | typeof BRACKET_CHAIN_ERROR__INVALID_TOKEN_MINT
+  | typeof BRACKET_CHAIN_ERROR__INVALID_TOURNAMENT_ACCOUNT
   | typeof BRACKET_CHAIN_ERROR__INVALID_TREASURY
   | typeof BRACKET_CHAIN_ERROR__INVALID_VAULT
+  | typeof BRACKET_CHAIN_ERROR__MALFORMED_ATTESTATION
+  | typeof BRACKET_CHAIN_ERROR__MALFORMED_RANDOMNESS
   | typeof BRACKET_CHAIN_ERROR__MATCH_ALREADY_REPORTED
   | typeof BRACKET_CHAIN_ERROR__MAX_PARTICIPANTS_EXCEEDED
+  | typeof BRACKET_CHAIN_ERROR__MIGRATION_NOT_NEEDED
   | typeof BRACKET_CHAIN_ERROR__MIN_PARTICIPANTS_NOT_MET
   | typeof BRACKET_CHAIN_ERROR__NAME_TOO_LONG
   | typeof BRACKET_CHAIN_ERROR__NON_PARTICIPANT_WINNER
+  | typeof BRACKET_CHAIN_ERROR__NO_PROPOSAL
   | typeof BRACKET_CHAIN_ERROR__NOT_ACTIVE
   | typeof BRACKET_CHAIN_ERROR__NOT_COMPLETED
+  | typeof BRACKET_CHAIN_ERROR__NOT_COUNTERPARTY
   | typeof BRACKET_CHAIN_ERROR__NOT_IN_REGISTRATION
+  | typeof BRACKET_CHAIN_ERROR__NOT_PLAYER_IN_MATCH
   | typeof BRACKET_CHAIN_ERROR__PARENT_MATCHES_NOT_COMPLETE
   | typeof BRACKET_CHAIN_ERROR__PRESET_EXCEEDS_PARTICIPANTS
+  | typeof BRACKET_CHAIN_ERROR__PROPOSAL_ALREADY_EXISTS
+  | typeof BRACKET_CHAIN_ERROR__PROPOSAL_DISPUTED
+  | typeof BRACKET_CHAIN_ERROR__PROPOSAL_NOT_DISPUTED
+  | typeof BRACKET_CHAIN_ERROR__RANDOMNESS_ACCOUNT_MISMATCH
+  | typeof BRACKET_CHAIN_ERROR__RANDOMNESS_NOT_RESOLVED
   | typeof BRACKET_CHAIN_ERROR__REFUND_ALREADY_ISSUED
   | typeof BRACKET_CHAIN_ERROR__REGISTRATION_CLOSED
   | typeof BRACKET_CHAIN_ERROR__REMAINING_ACCOUNTS_MISMATCH
+  | typeof BRACKET_CHAIN_ERROR__SEED_ALREADY_REVEALED
+  | typeof BRACKET_CHAIN_ERROR__SEED_NOT_REVEALED
+  | typeof BRACKET_CHAIN_ERROR__SETTLEMENT_MODE_MISMATCH
   | typeof BRACKET_CHAIN_ERROR__SLOT_HASHES_UNAVAILABLE
   | typeof BRACKET_CHAIN_ERROR__TOURNAMENT_FULL
   | typeof BRACKET_CHAIN_ERROR__TOURNAMENT_IN_PROGRESS
-  | typeof BRACKET_CHAIN_ERROR__UNAUTHORIZED_AUTHORITY;
+  | typeof BRACKET_CHAIN_ERROR__UNAUTHORIZED_AUTHORITY
+  | typeof BRACKET_CHAIN_ERROR__WRONG_ATTESTATION_CREDENTIAL
+  | typeof BRACKET_CHAIN_ERROR__WRONG_ATTESTATION_SCHEMA;
 
 let bracketChainErrorMessages: Record<BracketChainError, string> | undefined;
 if (process.env["NODE_ENV"] !== "production") {
   bracketChainErrorMessages = {
     [BRACKET_CHAIN_ERROR__ALREADY_REGISTERED]: `Wallet is already registered for this tournament`,
     [BRACKET_CHAIN_ERROR__ARITHMETIC_OVERFLOW]: `Arithmetic overflow`,
+    [BRACKET_CHAIN_ERROR__ATTESTATION_EXPIRED]: `Attestation has expired`,
+    [BRACKET_CHAIN_ERROR__ATTESTATION_REQUIRED]: `This game requires a SAS identity attestation to join`,
+    [BRACKET_CHAIN_ERROR__ATTESTATION_WALLET_MISMATCH]: `Attestation nonce does not bind to the joining wallet`,
+    [BRACKET_CHAIN_ERROR__CLAIM_WINDOW_NOT_ELAPSED]: `Claim window has not elapsed yet`,
+    [BRACKET_CHAIN_ERROR__GAME_NOT_YET_SUPPORTED]: `Selected game is not yet supported for tournament creation`,
+    [BRACKET_CHAIN_ERROR__INVALID_ATTESTATION_OWNER]: `Attestation account is not owned by the SAS program`,
     [BRACKET_CHAIN_ERROR__INVALID_MATCH_INDEX]: `Match referenced is outside the bracket`,
     [BRACKET_CHAIN_ERROR__INVALID_PAYOUT_PRESET]: `Selected payout preset is invalid`,
+    [BRACKET_CHAIN_ERROR__INVALID_PROPOSED_WINNER]: `Proposed winner is not a player in this match`,
+    [BRACKET_CHAIN_ERROR__INVALID_RANDOMNESS_OWNER]: `Randomness account is not owned by the Switchboard On-Demand program`,
     [BRACKET_CHAIN_ERROR__INVALID_TOKEN_MINT]: `Provided token mint is invalid for this tournament`,
+    [BRACKET_CHAIN_ERROR__INVALID_TOURNAMENT_ACCOUNT]: `Account is not a Tournament owned by this program`,
     [BRACKET_CHAIN_ERROR__INVALID_TREASURY]: `Provided treasury token account does not match the protocol treasury`,
     [BRACKET_CHAIN_ERROR__INVALID_VAULT]: `Provided vault token account does not match the tournament vault`,
+    [BRACKET_CHAIN_ERROR__MALFORMED_ATTESTATION]: `Attestation account data is malformed`,
+    [BRACKET_CHAIN_ERROR__MALFORMED_RANDOMNESS]: `Randomness account data is malformed`,
     [BRACKET_CHAIN_ERROR__MATCH_ALREADY_REPORTED]: `Match has already been reported`,
     [BRACKET_CHAIN_ERROR__MAX_PARTICIPANTS_EXCEEDED]: `Participant count exceeds the protocol maximum (128)`,
+    [BRACKET_CHAIN_ERROR__MIGRATION_NOT_NEEDED]: `Tournament account is already at the V1 layout; migration not needed`,
     [BRACKET_CHAIN_ERROR__MIN_PARTICIPANTS_NOT_MET]: `Participant count is below the protocol minimum (2)`,
     [BRACKET_CHAIN_ERROR__NAME_TOO_LONG]: `Tournament name exceeds 32 bytes`,
     [BRACKET_CHAIN_ERROR__NON_PARTICIPANT_WINNER]: `Reported winner is not a participant of the tournament`,
+    [BRACKET_CHAIN_ERROR__NO_PROPOSAL]: `Match has no pending proposal`,
     [BRACKET_CHAIN_ERROR__NOT_ACTIVE]: `Tournament is not in the Active state`,
     [BRACKET_CHAIN_ERROR__NOT_COMPLETED]: `Tournament is not in the Completed state`,
+    [BRACKET_CHAIN_ERROR__NOT_COUNTERPARTY]: `Only the counterparty may confirm or dispute this proposal`,
     [BRACKET_CHAIN_ERROR__NOT_IN_REGISTRATION]: `Tournament is not in the Registration state`,
+    [BRACKET_CHAIN_ERROR__NOT_PLAYER_IN_MATCH]: `Signer is not a player in this match`,
     [BRACKET_CHAIN_ERROR__PARENT_MATCHES_NOT_COMPLETE]: `Match parents not yet completed; cannot report this match`,
     [BRACKET_CHAIN_ERROR__PRESET_EXCEEDS_PARTICIPANTS]: `Selected payout preset requires more participants than configured`,
+    [BRACKET_CHAIN_ERROR__PROPOSAL_ALREADY_EXISTS]: `Match already has a pending proposal`,
+    [BRACKET_CHAIN_ERROR__PROPOSAL_DISPUTED]: `Proposal is disputed; it cannot be claimed`,
+    [BRACKET_CHAIN_ERROR__PROPOSAL_NOT_DISPUTED]: `Proposal is not disputed`,
+    [BRACKET_CHAIN_ERROR__RANDOMNESS_ACCOUNT_MISMATCH]: `Provided randomness account does not match the tournament commitment`,
+    [BRACKET_CHAIN_ERROR__RANDOMNESS_NOT_RESOLVED]: `Switchboard randomness is not yet resolved for this slot`,
     [BRACKET_CHAIN_ERROR__REFUND_ALREADY_ISSUED]: `Refund has already been issued to this participant`,
     [BRACKET_CHAIN_ERROR__REGISTRATION_CLOSED]: `Registration window for this tournament is closed`,
     [BRACKET_CHAIN_ERROR__REMAINING_ACCOUNTS_MISMATCH]: `remaining_accounts does not match expected count for this instruction`,
+    [BRACKET_CHAIN_ERROR__SEED_ALREADY_REVEALED]: `Tournament seed has already been revealed`,
+    [BRACKET_CHAIN_ERROR__SEED_NOT_REVEALED]: `Tournament seed has not been revealed; start is gated on VRF`,
+    [BRACKET_CHAIN_ERROR__SETTLEMENT_MODE_MISMATCH]: `This action is not allowed for the tournament's settlement mode`,
     [BRACKET_CHAIN_ERROR__SLOT_HASHES_UNAVAILABLE]: `slot_hashes sysvar is empty; cannot derive seed`,
     [BRACKET_CHAIN_ERROR__TOURNAMENT_FULL]: `Tournament has reached its maximum participant count`,
     [BRACKET_CHAIN_ERROR__TOURNAMENT_IN_PROGRESS]: `Cannot cancel a tournament that has matches in progress`,
     [BRACKET_CHAIN_ERROR__UNAUTHORIZED_AUTHORITY]: `Caller is not the authorized authority for this action`,
+    [BRACKET_CHAIN_ERROR__WRONG_ATTESTATION_CREDENTIAL]: `Attestation credential does not match the protocol's SAS credential`,
+    [BRACKET_CHAIN_ERROR__WRONG_ATTESTATION_SCHEMA]: `Attestation schema does not match the game's SAS schema`,
   };
 }
 

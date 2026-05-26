@@ -31,10 +31,10 @@ import {
   type InstructionWithAccounts,
   type InstructionWithData,
   type ReadonlyAccount,
+  type ReadonlySignerAccount,
   type ReadonlyUint8Array,
   type TransactionSigner,
   type WritableAccount,
-  type WritableSignerAccount,
 } from "@solana/kit";
 import {
   getAccountMetaFactory,
@@ -44,22 +44,24 @@ import {
 import { findProtocolConfigPda, findVaultPda } from "../pdas";
 import { BRACKET_CHAIN_PROGRAM_ADDRESS } from "../programs";
 
-export const REPORT_RESULT_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([
-  195, 187, 161, 107, 75, 154, 102, 183,
-]);
+export const RESOLVE_DISPUTE_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array(
+  [231, 6, 202, 6, 96, 103, 12, 230],
+);
 
-export function getReportResultDiscriminatorBytes(): ReadonlyUint8Array {
+export function getResolveDisputeDiscriminatorBytes(): ReadonlyUint8Array {
   return fixEncoderSize(getBytesEncoder(), 8).encode(
-    REPORT_RESULT_DISCRIMINATOR,
+    RESOLVE_DISPUTE_DISCRIMINATOR,
   );
 }
 
-export type ReportResultInstruction<
+export type ResolveDisputeInstruction<
   TProgram extends string = typeof BRACKET_CHAIN_PROGRAM_ADDRESS,
   TAccountOrganizer extends string | AccountMeta<string> = string,
   TAccountTournament extends string | AccountMeta<string> = string,
   TAccountMatchAccount extends string | AccountMeta<string> = string,
   TAccountNextMatch extends string | AccountMeta<string> = string,
+  TAccountParticipantA extends string | AccountMeta<string> = string,
+  TAccountParticipantB extends string | AccountMeta<string> = string,
   TAccountProtocolConfig extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
   TAccountOrganizerTokenAccount extends string | AccountMeta<string> = string,
@@ -71,7 +73,7 @@ export type ReportResultInstruction<
   InstructionWithAccounts<
     [
       TAccountOrganizer extends string
-        ? WritableSignerAccount<TAccountOrganizer> &
+        ? ReadonlySignerAccount<TAccountOrganizer> &
             AccountSignerMeta<TAccountOrganizer>
         : TAccountOrganizer,
       TAccountTournament extends string
@@ -83,6 +85,12 @@ export type ReportResultInstruction<
       TAccountNextMatch extends string
         ? WritableAccount<TAccountNextMatch>
         : TAccountNextMatch,
+      TAccountParticipantA extends string
+        ? WritableAccount<TAccountParticipantA>
+        : TAccountParticipantA,
+      TAccountParticipantB extends string
+        ? WritableAccount<TAccountParticipantB>
+        : TAccountParticipantB,
       TAccountProtocolConfig extends string
         ? ReadonlyAccount<TAccountProtocolConfig>
         : TAccountProtocolConfig,
@@ -99,29 +107,29 @@ export type ReportResultInstruction<
     ]
   >;
 
-export type ReportResultInstructionData = {
+export type ResolveDisputeInstructionData = {
   discriminator: ReadonlyUint8Array;
   winner: Address;
   placements: Array<Address>;
 };
 
-export type ReportResultInstructionDataArgs = {
+export type ResolveDisputeInstructionDataArgs = {
   winner: Address;
   placements: Array<Address>;
 };
 
-export function getReportResultInstructionDataEncoder(): Encoder<ReportResultInstructionDataArgs> {
+export function getResolveDisputeInstructionDataEncoder(): Encoder<ResolveDisputeInstructionDataArgs> {
   return transformEncoder(
     getStructEncoder([
       ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
       ["winner", getAddressEncoder()],
       ["placements", getArrayEncoder(getAddressEncoder())],
     ]),
-    (value) => ({ ...value, discriminator: REPORT_RESULT_DISCRIMINATOR }),
+    (value) => ({ ...value, discriminator: RESOLVE_DISPUTE_DISCRIMINATOR }),
   );
 }
 
-export function getReportResultInstructionDataDecoder(): Decoder<ReportResultInstructionData> {
+export function getResolveDisputeInstructionDataDecoder(): Decoder<ResolveDisputeInstructionData> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
     ["winner", getAddressDecoder()],
@@ -129,21 +137,23 @@ export function getReportResultInstructionDataDecoder(): Decoder<ReportResultIns
   ]);
 }
 
-export function getReportResultInstructionDataCodec(): Codec<
-  ReportResultInstructionDataArgs,
-  ReportResultInstructionData
+export function getResolveDisputeInstructionDataCodec(): Codec<
+  ResolveDisputeInstructionDataArgs,
+  ResolveDisputeInstructionData
 > {
   return combineCodec(
-    getReportResultInstructionDataEncoder(),
-    getReportResultInstructionDataDecoder(),
+    getResolveDisputeInstructionDataEncoder(),
+    getResolveDisputeInstructionDataDecoder(),
   );
 }
 
-export type ReportResultAsyncInput<
+export type ResolveDisputeAsyncInput<
   TAccountOrganizer extends string = string,
   TAccountTournament extends string = string,
   TAccountMatchAccount extends string = string,
   TAccountNextMatch extends string = string,
+  TAccountParticipantA extends string = string,
+  TAccountParticipantB extends string = string,
   TAccountProtocolConfig extends string = string,
   TAccountVault extends string = string,
   TAccountOrganizerTokenAccount extends string = string,
@@ -152,39 +162,37 @@ export type ReportResultAsyncInput<
   organizer: TransactionSigner<TAccountOrganizer>;
   tournament: Address<TAccountTournament>;
   matchAccount: Address<TAccountMatchAccount>;
-  /** Required for non-final matches; pass `None` when reporting the final. */
   nextMatch?: Address<TAccountNextMatch>;
+  participantA: Address<TAccountParticipantA>;
+  participantB: Address<TAccountParticipantB>;
   protocolConfig?: Address<TAccountProtocolConfig>;
   vault?: Address<TAccountVault>;
-  /**
-   * Organizer's ATA in the tournament's token mint. Required on final-match
-   * when `tournament.organizer_deposit > 0` and the deposit has not been
-   * refunded yet (Variant A — deposit is excluded from the prize-pool
-   * basis). Pass `None` for non-final reports or when the deposit is `0`.
-   * Mint + owner are validated by Anchor (constraints auto-skip when None).
-   */
   organizerTokenAccount?: Address<TAccountOrganizerTokenAccount>;
   tokenProgram?: Address<TAccountTokenProgram>;
-  winner: ReportResultInstructionDataArgs["winner"];
-  placements: ReportResultInstructionDataArgs["placements"];
+  winner: ResolveDisputeInstructionDataArgs["winner"];
+  placements: ResolveDisputeInstructionDataArgs["placements"];
 };
 
-export async function getReportResultInstructionAsync<
+export async function getResolveDisputeInstructionAsync<
   TAccountOrganizer extends string,
   TAccountTournament extends string,
   TAccountMatchAccount extends string,
   TAccountNextMatch extends string,
+  TAccountParticipantA extends string,
+  TAccountParticipantB extends string,
   TAccountProtocolConfig extends string,
   TAccountVault extends string,
   TAccountOrganizerTokenAccount extends string,
   TAccountTokenProgram extends string,
   TProgramAddress extends Address = typeof BRACKET_CHAIN_PROGRAM_ADDRESS,
 >(
-  input: ReportResultAsyncInput<
+  input: ResolveDisputeAsyncInput<
     TAccountOrganizer,
     TAccountTournament,
     TAccountMatchAccount,
     TAccountNextMatch,
+    TAccountParticipantA,
+    TAccountParticipantB,
     TAccountProtocolConfig,
     TAccountVault,
     TAccountOrganizerTokenAccount,
@@ -192,12 +200,14 @@ export async function getReportResultInstructionAsync<
   >,
   config?: { programAddress?: TProgramAddress },
 ): Promise<
-  ReportResultInstruction<
+  ResolveDisputeInstruction<
     TProgramAddress,
     TAccountOrganizer,
     TAccountTournament,
     TAccountMatchAccount,
     TAccountNextMatch,
+    TAccountParticipantA,
+    TAccountParticipantB,
     TAccountProtocolConfig,
     TAccountVault,
     TAccountOrganizerTokenAccount,
@@ -210,10 +220,12 @@ export async function getReportResultInstructionAsync<
 
   // Original accounts.
   const originalAccounts = {
-    organizer: { value: input.organizer ?? null, isWritable: true },
+    organizer: { value: input.organizer ?? null, isWritable: false },
     tournament: { value: input.tournament ?? null, isWritable: true },
     matchAccount: { value: input.matchAccount ?? null, isWritable: true },
     nextMatch: { value: input.nextMatch ?? null, isWritable: true },
+    participantA: { value: input.participantA ?? null, isWritable: true },
+    participantB: { value: input.participantB ?? null, isWritable: true },
     protocolConfig: { value: input.protocolConfig ?? null, isWritable: false },
     vault: { value: input.vault ?? null, isWritable: true },
     organizerTokenAccount: {
@@ -254,21 +266,25 @@ export async function getReportResultInstructionAsync<
       getAccountMeta("tournament", accounts.tournament),
       getAccountMeta("matchAccount", accounts.matchAccount),
       getAccountMeta("nextMatch", accounts.nextMatch),
+      getAccountMeta("participantA", accounts.participantA),
+      getAccountMeta("participantB", accounts.participantB),
       getAccountMeta("protocolConfig", accounts.protocolConfig),
       getAccountMeta("vault", accounts.vault),
       getAccountMeta("organizerTokenAccount", accounts.organizerTokenAccount),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
     ],
-    data: getReportResultInstructionDataEncoder().encode(
-      args as ReportResultInstructionDataArgs,
+    data: getResolveDisputeInstructionDataEncoder().encode(
+      args as ResolveDisputeInstructionDataArgs,
     ),
     programAddress,
-  } as ReportResultInstruction<
+  } as ResolveDisputeInstruction<
     TProgramAddress,
     TAccountOrganizer,
     TAccountTournament,
     TAccountMatchAccount,
     TAccountNextMatch,
+    TAccountParticipantA,
+    TAccountParticipantB,
     TAccountProtocolConfig,
     TAccountVault,
     TAccountOrganizerTokenAccount,
@@ -276,11 +292,13 @@ export async function getReportResultInstructionAsync<
   >);
 }
 
-export type ReportResultInput<
+export type ResolveDisputeInput<
   TAccountOrganizer extends string = string,
   TAccountTournament extends string = string,
   TAccountMatchAccount extends string = string,
   TAccountNextMatch extends string = string,
+  TAccountParticipantA extends string = string,
+  TAccountParticipantB extends string = string,
   TAccountProtocolConfig extends string = string,
   TAccountVault extends string = string,
   TAccountOrganizerTokenAccount extends string = string,
@@ -289,51 +307,51 @@ export type ReportResultInput<
   organizer: TransactionSigner<TAccountOrganizer>;
   tournament: Address<TAccountTournament>;
   matchAccount: Address<TAccountMatchAccount>;
-  /** Required for non-final matches; pass `None` when reporting the final. */
   nextMatch?: Address<TAccountNextMatch>;
+  participantA: Address<TAccountParticipantA>;
+  participantB: Address<TAccountParticipantB>;
   protocolConfig: Address<TAccountProtocolConfig>;
   vault: Address<TAccountVault>;
-  /**
-   * Organizer's ATA in the tournament's token mint. Required on final-match
-   * when `tournament.organizer_deposit > 0` and the deposit has not been
-   * refunded yet (Variant A — deposit is excluded from the prize-pool
-   * basis). Pass `None` for non-final reports or when the deposit is `0`.
-   * Mint + owner are validated by Anchor (constraints auto-skip when None).
-   */
   organizerTokenAccount?: Address<TAccountOrganizerTokenAccount>;
   tokenProgram?: Address<TAccountTokenProgram>;
-  winner: ReportResultInstructionDataArgs["winner"];
-  placements: ReportResultInstructionDataArgs["placements"];
+  winner: ResolveDisputeInstructionDataArgs["winner"];
+  placements: ResolveDisputeInstructionDataArgs["placements"];
 };
 
-export function getReportResultInstruction<
+export function getResolveDisputeInstruction<
   TAccountOrganizer extends string,
   TAccountTournament extends string,
   TAccountMatchAccount extends string,
   TAccountNextMatch extends string,
+  TAccountParticipantA extends string,
+  TAccountParticipantB extends string,
   TAccountProtocolConfig extends string,
   TAccountVault extends string,
   TAccountOrganizerTokenAccount extends string,
   TAccountTokenProgram extends string,
   TProgramAddress extends Address = typeof BRACKET_CHAIN_PROGRAM_ADDRESS,
 >(
-  input: ReportResultInput<
+  input: ResolveDisputeInput<
     TAccountOrganizer,
     TAccountTournament,
     TAccountMatchAccount,
     TAccountNextMatch,
+    TAccountParticipantA,
+    TAccountParticipantB,
     TAccountProtocolConfig,
     TAccountVault,
     TAccountOrganizerTokenAccount,
     TAccountTokenProgram
   >,
   config?: { programAddress?: TProgramAddress },
-): ReportResultInstruction<
+): ResolveDisputeInstruction<
   TProgramAddress,
   TAccountOrganizer,
   TAccountTournament,
   TAccountMatchAccount,
   TAccountNextMatch,
+  TAccountParticipantA,
+  TAccountParticipantB,
   TAccountProtocolConfig,
   TAccountVault,
   TAccountOrganizerTokenAccount,
@@ -345,10 +363,12 @@ export function getReportResultInstruction<
 
   // Original accounts.
   const originalAccounts = {
-    organizer: { value: input.organizer ?? null, isWritable: true },
+    organizer: { value: input.organizer ?? null, isWritable: false },
     tournament: { value: input.tournament ?? null, isWritable: true },
     matchAccount: { value: input.matchAccount ?? null, isWritable: true },
     nextMatch: { value: input.nextMatch ?? null, isWritable: true },
+    participantA: { value: input.participantA ?? null, isWritable: true },
+    participantB: { value: input.participantB ?? null, isWritable: true },
     protocolConfig: { value: input.protocolConfig ?? null, isWritable: false },
     vault: { value: input.vault ?? null, isWritable: true },
     organizerTokenAccount: {
@@ -378,21 +398,25 @@ export function getReportResultInstruction<
       getAccountMeta("tournament", accounts.tournament),
       getAccountMeta("matchAccount", accounts.matchAccount),
       getAccountMeta("nextMatch", accounts.nextMatch),
+      getAccountMeta("participantA", accounts.participantA),
+      getAccountMeta("participantB", accounts.participantB),
       getAccountMeta("protocolConfig", accounts.protocolConfig),
       getAccountMeta("vault", accounts.vault),
       getAccountMeta("organizerTokenAccount", accounts.organizerTokenAccount),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
     ],
-    data: getReportResultInstructionDataEncoder().encode(
-      args as ReportResultInstructionDataArgs,
+    data: getResolveDisputeInstructionDataEncoder().encode(
+      args as ResolveDisputeInstructionDataArgs,
     ),
     programAddress,
-  } as ReportResultInstruction<
+  } as ResolveDisputeInstruction<
     TProgramAddress,
     TAccountOrganizer,
     TAccountTournament,
     TAccountMatchAccount,
     TAccountNextMatch,
+    TAccountParticipantA,
+    TAccountParticipantB,
     TAccountProtocolConfig,
     TAccountVault,
     TAccountOrganizerTokenAccount,
@@ -400,7 +424,7 @@ export function getReportResultInstruction<
   >);
 }
 
-export type ParsedReportResultInstruction<
+export type ParsedResolveDisputeInstruction<
   TProgram extends string = typeof BRACKET_CHAIN_PROGRAM_ADDRESS,
   TAccountMetas extends readonly AccountMeta[] = readonly AccountMeta[],
 > = {
@@ -409,37 +433,31 @@ export type ParsedReportResultInstruction<
     organizer: TAccountMetas[0];
     tournament: TAccountMetas[1];
     matchAccount: TAccountMetas[2];
-    /** Required for non-final matches; pass `None` when reporting the final. */
     nextMatch?: TAccountMetas[3] | undefined;
-    protocolConfig: TAccountMetas[4];
-    vault: TAccountMetas[5];
-    /**
-     * Organizer's ATA in the tournament's token mint. Required on final-match
-     * when `tournament.organizer_deposit > 0` and the deposit has not been
-     * refunded yet (Variant A — deposit is excluded from the prize-pool
-     * basis). Pass `None` for non-final reports or when the deposit is `0`.
-     * Mint + owner are validated by Anchor (constraints auto-skip when None).
-     */
-    organizerTokenAccount?: TAccountMetas[6] | undefined;
-    tokenProgram: TAccountMetas[7];
+    participantA: TAccountMetas[4];
+    participantB: TAccountMetas[5];
+    protocolConfig: TAccountMetas[6];
+    vault: TAccountMetas[7];
+    organizerTokenAccount?: TAccountMetas[8] | undefined;
+    tokenProgram: TAccountMetas[9];
   };
-  data: ReportResultInstructionData;
+  data: ResolveDisputeInstructionData;
 };
 
-export function parseReportResultInstruction<
+export function parseResolveDisputeInstruction<
   TProgram extends string,
   TAccountMetas extends readonly AccountMeta[],
 >(
   instruction: Instruction<TProgram> &
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
-): ParsedReportResultInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 8) {
+): ParsedResolveDisputeInstruction<TProgram, TAccountMetas> {
+  if (instruction.accounts.length < 10) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 8,
+        expectedAccountMetas: 10,
       },
     );
   }
@@ -462,11 +480,13 @@ export function parseReportResultInstruction<
       tournament: getNextAccount(),
       matchAccount: getNextAccount(),
       nextMatch: getNextOptionalAccount(),
+      participantA: getNextAccount(),
+      participantB: getNextAccount(),
       protocolConfig: getNextAccount(),
       vault: getNextAccount(),
       organizerTokenAccount: getNextOptionalAccount(),
       tokenProgram: getNextAccount(),
     },
-    data: getReportResultInstructionDataDecoder().decode(instruction.data),
+    data: getResolveDisputeInstructionDataDecoder().decode(instruction.data),
   };
 }
