@@ -30,7 +30,33 @@ export type IndexerPayoutPreset = "WinnerTakesAll" | "Standard" | "Deep";
 
 export type IndexerPayoutKind = "Prize" | "Refund" | "Fee" | "OrganizerRefund";
 
-export type IndexerMatchStatus = "Pending" | "Active" | "Completed";
+/**
+ * Match lifecycle as served by the indexer. Pending/Active/Completed come
+ * straight from chain; PendingConfirmation/Disputed are derived by the parser
+ * from the settlement envelope (Stage B). The on-chain `MatchNode.status` only
+ * has the three base states — the two intermediate states live purely in the
+ * indexer's read model, so consumers mapping back to the chain `MatchNode`
+ * shape must collapse them to `Active` and read the envelope for the UI state.
+ */
+export type IndexerMatchStatus =
+  | "Pending"
+  | "Active"
+  | "PendingConfirmation"
+  | "Disputed"
+  | "Completed";
+
+/** On-chain `SettlementMode` as served by the indexer. */
+export type IndexerSettlementMode =
+  | "OrganizerOnly"
+  | "PlayerReported"
+  | "Oracle";
+
+/** Source of a match-result proposal, mirroring the on-chain `ProposalSource`. */
+export type IndexerProposalSource =
+  | "None"
+  | "Player"
+  | "Oracle"
+  | "GameServer";
 
 export interface IndexerTournament {
   address: string;
@@ -46,6 +72,14 @@ export interface IndexerTournament {
   payoutPreset: IndexerPayoutPreset;
   registrationDeadline: string;
   status: IndexerTournamentStatus;
+  /**
+   * On-chain settlement mode (who may report results). Not carried by any
+   * event — the reconciliation cron backfills it set-once from chain, so it is
+   * `null` only on freshly-indexed rows before the first reconcile (always
+   * populated well before a tournament is Active). Frontend uses this to pick
+   * the result flow: organizer-report vs player-reported.
+   */
+  settlementMode: IndexerSettlementMode | null;
   champion: string | null;
   grossPool: string | null;
   feeAmount: string | null;
@@ -85,6 +119,17 @@ export interface IndexerParticipant {
   registeredAt: string;
   registeredTxSig: string;
   chainSlotAtWrite: string;
+  /**
+   * B-14 (Stage B): foundation stats + game identity, mirroring the on-chain
+   * Participant account. No current event carries these — the reconciliation
+   * cron backfills them from chain, so they read `0` / `null` until then.
+   */
+  wins: number;
+  losses: number;
+  pointsFor: number;
+  pointsAgainst: number;
+  /** keccak hash (hex) of the SAS attestation identity bytes; null for Manual games. */
+  identityHash: string | null;
 }
 
 /**
@@ -96,6 +141,11 @@ export interface IndexerParticipant {
 export interface IndexerMatch {
   id: string;
   tournamentAddress: string;
+  /**
+   * B-14 (C9): bracket lane — `0` for single-elimination (V1). Part of the
+   * on-chain MatchNode PDA seed and this row's natural key.
+   */
+  bracket: number;
   round: number;
   matchIndex: number;
   playerA: string | null;
@@ -106,6 +156,27 @@ export interface IndexerMatch {
   reportedAt: string | null;
   reportedTxSig: string | null;
   chainSlotAtWrite: string;
+  /**
+   * B-14 (Stage B): player-reported / oracle settlement envelope, mirroring
+   * the on-chain MatchNode fields. `status` carries the derived UI state
+   * (PendingConfirmation / Disputed / Completed); these hold the underlying
+   * envelope the frontend reads to render confirm/dispute panels and the
+   * auto-claim / vrf crons scan. Empty (`None` / null / false) on matches with
+   * no live proposal.
+   */
+  proposalSource: IndexerProposalSource;
+  proposer: string | null;
+  proposedWinner: string | null;
+  proposedAt: string | null;
+  /**
+   * ISO time after which the result may be permissionlessly finalized. On
+   * dispute it is re-armed to the +24h force-claim window. Null when no
+   * proposal is live.
+   */
+  claimDeadline: string | null;
+  disputed: boolean;
+  /** Raw `dispute_reason` code (u8) from the ResultDisputed event; null when undisputed. */
+  disputeReason: number | null;
 }
 
 export interface IndexerClientOptions {

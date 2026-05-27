@@ -124,6 +124,8 @@ export type {
   IndexerPayout,
   IndexerPayoutKind,
   IndexerPayoutPreset,
+  IndexerProposalSource,
+  IndexerSettlementMode,
   IndexerTournament,
   IndexerTournamentStatus,
   ListTournamentsOptions,
