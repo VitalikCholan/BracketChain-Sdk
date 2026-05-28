@@ -94,6 +94,12 @@ export interface IndexerTournament {
    * rows seeded before 5.1 — treat as fully stale and reconcile from chain.
    */
   chainSlotAtWrite: string;
+  /**
+   * Stage C (V1.2 Oracle): wallet authorized to resolve disputed oracle
+   * proposals. Defaults to the organizer at create-time; Squads reassignment
+   * deferred to V1.3. Null on pre-V1.2 rows that haven't been reconciled yet.
+   */
+  arbitrator: string | null;
 }
 
 export interface IndexerPayout {
@@ -177,6 +183,21 @@ export interface IndexerMatch {
   disputed: boolean;
   /** Raw `dispute_reason` code (u8) from the ResultDisputed event; null when undisputed. */
   disputeReason: number | null;
+  /**
+   * Stage C (V1.2 Oracle settlement) — `MatchCommitment` snapshot. All null on
+   * OrganizerOnly / PlayerReported matches and on Oracle matches before the
+   * commit/bind ceremony has begun. Byte fields serialize as lowercase hex.
+   * `lobbyId` + `committedAt` populate when `MatchLobbyCommitted` fires;
+   * `switchboardFeed` populates when `MatchFeedBound` fires; the game-id
+   * fields + `expectedFeedHash` are backfilled from chain by the reconciliation
+   * cron (audit + frontend OraclePendingPanel display).
+   */
+  lobbyId: string | null;
+  playerAGameId: string | null;
+  playerBGameId: string | null;
+  expectedFeedHash: string | null;
+  committedAt: string | null;
+  switchboardFeed: string | null;
 }
 
 export interface IndexerClientOptions {

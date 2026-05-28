@@ -58,6 +58,7 @@ import {
   getForceClaimDisputedInstructionAsync,
   getInitializeProtocolInstructionAsync,
   getJoinTournamentInstructionAsync,
+  getMigrateProtocolConfigInstructionAsync,
   getMigrateV1TournamentInstructionAsync,
   getProposeResultInstruction,
   getProposeResultOracleInstructionAsync,
@@ -78,6 +79,7 @@ import {
   parseForceClaimDisputedInstruction,
   parseInitializeProtocolInstruction,
   parseJoinTournamentInstruction,
+  parseMigrateProtocolConfigInstruction,
   parseMigrateV1TournamentInstruction,
   parseProposeResultInstruction,
   parseProposeResultOracleInstruction,
@@ -98,6 +100,7 @@ import {
   type ForceClaimDisputedAsyncInput,
   type InitializeProtocolAsyncInput,
   type JoinTournamentAsyncInput,
+  type MigrateProtocolConfigAsyncInput,
   type MigrateV1TournamentAsyncInput,
   type ParsedBindMatchFeedInstruction,
   type ParsedCancelTournamentInstruction,
@@ -109,6 +112,7 @@ import {
   type ParsedForceClaimDisputedInstruction,
   type ParsedInitializeProtocolInstruction,
   type ParsedJoinTournamentInstruction,
+  type ParsedMigrateProtocolConfigInstruction,
   type ParsedMigrateV1TournamentInstruction,
   type ParsedProposeResultInstruction,
   type ParsedProposeResultOracleInstruction,
@@ -211,6 +215,7 @@ export enum BracketChainInstruction {
   ForceClaimDisputed,
   InitializeProtocol,
   JoinTournament,
+  MigrateProtocolConfig,
   MigrateV1Tournament,
   ProposeResult,
   ProposeResultOracle,
@@ -336,6 +341,17 @@ export function identifyBracketChainInstruction(
     )
   ) {
     return BracketChainInstruction.JoinTournament;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([240, 133, 241, 218, 118, 253, 139, 28]),
+      ),
+      0,
+    )
+  ) {
+    return BracketChainInstruction.MigrateProtocolConfig;
   }
   if (
     containsBytes(
@@ -487,6 +503,9 @@ export type ParsedBracketChainInstruction<
       instructionType: BracketChainInstruction.JoinTournament;
     } & ParsedJoinTournamentInstruction<TProgram>)
   | ({
+      instructionType: BracketChainInstruction.MigrateProtocolConfig;
+    } & ParsedMigrateProtocolConfigInstruction<TProgram>)
+  | ({
       instructionType: BracketChainInstruction.MigrateV1Tournament;
     } & ParsedMigrateV1TournamentInstruction<TProgram>)
   | ({
@@ -590,6 +609,13 @@ export function parseBracketChainInstruction<TProgram extends string>(
       return {
         instructionType: BracketChainInstruction.JoinTournament,
         ...parseJoinTournamentInstruction(instruction),
+      };
+    }
+    case BracketChainInstruction.MigrateProtocolConfig: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: BracketChainInstruction.MigrateProtocolConfig,
+        ...parseMigrateProtocolConfigInstruction(instruction),
       };
     }
     case BracketChainInstruction.MigrateV1Tournament: {
@@ -731,6 +757,10 @@ export type BracketChainPluginInstructions = {
     input: JoinTournamentAsyncInput,
   ) => ReturnType<typeof getJoinTournamentInstructionAsync> &
     SelfPlanAndSendFunctions;
+  migrateProtocolConfig: (
+    input: MigrateProtocolConfigAsyncInput,
+  ) => ReturnType<typeof getMigrateProtocolConfigInstructionAsync> &
+    SelfPlanAndSendFunctions;
   migrateV1Tournament: (
     input: MigrateV1TournamentAsyncInput,
   ) => ReturnType<typeof getMigrateV1TournamentInstructionAsync> &
@@ -856,6 +886,11 @@ export function bracketChainProgram() {
             addSelfPlanAndSendFunctions(
               client,
               getJoinTournamentInstructionAsync(input),
+            ),
+          migrateProtocolConfig: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getMigrateProtocolConfigInstructionAsync(input),
             ),
           migrateV1Tournament: (input) =>
             addSelfPlanAndSendFunctions(

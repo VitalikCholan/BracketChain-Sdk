@@ -16,6 +16,7 @@ export * from "./disputeResult";
 export * from "./forceClaimDisputed";
 export * from "./initializeProtocol";
 export * from "./joinTournament";
+export * from "./migrateProtocolConfig";
 export * from "./migrateV1Tournament";
 export * from "./proposeResult";
 export * from "./proposeResultOracle";
