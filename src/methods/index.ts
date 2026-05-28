@@ -75,6 +75,31 @@ export type {
   ForceClaimDisputedResult,
 } from "./forceClaimDisputed";
 
+// ── Oracle settlement (Stage C / V1.2) ──────────────────────────────────────
+export { commitMatchLobby } from "./commitMatchLobby";
+export type {
+  CommitMatchLobbyParams,
+  CommitMatchLobbyResult,
+} from "./commitMatchLobby";
+
+export { bindMatchFeed } from "./bindMatchFeed";
+export type {
+  BindMatchFeedParams,
+  BindMatchFeedResult,
+} from "./bindMatchFeed";
+
+export { proposeResultOracle } from "./proposeResultOracle";
+export type {
+  ProposeResultOracleParams,
+  ProposeResultOracleResult,
+} from "./proposeResultOracle";
+
+export { setOracleConfig } from "./setOracleConfig";
+export type {
+  SetOracleConfigParams,
+  SetOracleConfigResult,
+} from "./setOracleConfig";
+
 // ── VRF seeding (Stage B) ───────────────────────────────────────────────────
 export { requestSeed } from "./requestSeed";
 export type { RequestSeedParams, RequestSeedResult } from "./requestSeed";

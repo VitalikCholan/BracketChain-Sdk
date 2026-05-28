@@ -6,6 +6,7 @@
  * @see https://github.com/codama-idl/codama
  */
 
+export * from "./matchCommitment";
 export * from "./matchInitDescriptor";
 export * from "./matchStatus";
 export * from "./payoutPreset";

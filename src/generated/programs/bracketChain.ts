@@ -48,8 +48,10 @@ import {
   type TournamentArgs,
 } from "../accounts";
 import {
+  getBindMatchFeedInstructionAsync,
   getCancelTournamentInstructionAsync,
   getClaimResultInstructionAsync,
+  getCommitMatchLobbyInstruction,
   getConfirmResultInstructionAsync,
   getCreateTournamentInstructionAsync,
   getDisputeResultInstruction,
@@ -58,14 +60,18 @@ import {
   getJoinTournamentInstructionAsync,
   getMigrateV1TournamentInstructionAsync,
   getProposeResultInstruction,
+  getProposeResultOracleInstructionAsync,
   getReportResultInstructionAsync,
   getRequestSeedInstruction,
   getResolveDisputeInstructionAsync,
   getRevealSeedInstruction,
+  getSetOracleConfigInstructionAsync,
   getSetSasConfigInstructionAsync,
   getStartTournamentInstruction,
+  parseBindMatchFeedInstruction,
   parseCancelTournamentInstruction,
   parseClaimResultInstruction,
+  parseCommitMatchLobbyInstruction,
   parseConfirmResultInstruction,
   parseCreateTournamentInstruction,
   parseDisputeResultInstruction,
@@ -74,14 +80,18 @@ import {
   parseJoinTournamentInstruction,
   parseMigrateV1TournamentInstruction,
   parseProposeResultInstruction,
+  parseProposeResultOracleInstruction,
   parseReportResultInstruction,
   parseRequestSeedInstruction,
   parseResolveDisputeInstruction,
   parseRevealSeedInstruction,
+  parseSetOracleConfigInstruction,
   parseSetSasConfigInstruction,
   parseStartTournamentInstruction,
+  type BindMatchFeedAsyncInput,
   type CancelTournamentAsyncInput,
   type ClaimResultAsyncInput,
+  type CommitMatchLobbyInput,
   type ConfirmResultAsyncInput,
   type CreateTournamentAsyncInput,
   type DisputeResultInput,
@@ -89,8 +99,10 @@ import {
   type InitializeProtocolAsyncInput,
   type JoinTournamentAsyncInput,
   type MigrateV1TournamentAsyncInput,
+  type ParsedBindMatchFeedInstruction,
   type ParsedCancelTournamentInstruction,
   type ParsedClaimResultInstruction,
+  type ParsedCommitMatchLobbyInstruction,
   type ParsedConfirmResultInstruction,
   type ParsedCreateTournamentInstruction,
   type ParsedDisputeResultInstruction,
@@ -99,17 +111,21 @@ import {
   type ParsedJoinTournamentInstruction,
   type ParsedMigrateV1TournamentInstruction,
   type ParsedProposeResultInstruction,
+  type ParsedProposeResultOracleInstruction,
   type ParsedReportResultInstruction,
   type ParsedRequestSeedInstruction,
   type ParsedResolveDisputeInstruction,
   type ParsedRevealSeedInstruction,
+  type ParsedSetOracleConfigInstruction,
   type ParsedSetSasConfigInstruction,
   type ParsedStartTournamentInstruction,
   type ProposeResultInput,
+  type ProposeResultOracleAsyncInput,
   type ReportResultAsyncInput,
   type RequestSeedInput,
   type ResolveDisputeAsyncInput,
   type RevealSeedInput,
+  type SetOracleConfigAsyncInput,
   type SetSasConfigAsyncInput,
   type StartTournamentInput,
 } from "../instructions";
@@ -185,8 +201,10 @@ export function identifyBracketChainAccount(
 }
 
 export enum BracketChainInstruction {
+  BindMatchFeed,
   CancelTournament,
   ClaimResult,
+  CommitMatchLobby,
   ConfirmResult,
   CreateTournament,
   DisputeResult,
@@ -195,10 +213,12 @@ export enum BracketChainInstruction {
   JoinTournament,
   MigrateV1Tournament,
   ProposeResult,
+  ProposeResultOracle,
   ReportResult,
   RequestSeed,
   ResolveDispute,
   RevealSeed,
+  SetOracleConfig,
   SetSasConfig,
   StartTournament,
 }
@@ -207,6 +227,17 @@ export function identifyBracketChainInstruction(
   instruction: { data: ReadonlyUint8Array } | ReadonlyUint8Array,
 ): BracketChainInstruction {
   const data = "data" in instruction ? instruction.data : instruction;
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([108, 176, 122, 23, 194, 50, 195, 76]),
+      ),
+      0,
+    )
+  ) {
+    return BracketChainInstruction.BindMatchFeed;
+  }
   if (
     containsBytes(
       data,
@@ -228,6 +259,17 @@ export function identifyBracketChainInstruction(
     )
   ) {
     return BracketChainInstruction.ClaimResult;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([37, 201, 27, 223, 219, 158, 8, 185]),
+      ),
+      0,
+    )
+  ) {
+    return BracketChainInstruction.CommitMatchLobby;
   }
   if (
     containsBytes(
@@ -321,6 +363,17 @@ export function identifyBracketChainInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([252, 97, 195, 178, 97, 244, 118, 88]),
+      ),
+      0,
+    )
+  ) {
+    return BracketChainInstruction.ProposeResultOracle;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([195, 187, 161, 107, 75, 154, 102, 183]),
       ),
       0,
@@ -365,6 +418,17 @@ export function identifyBracketChainInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([96, 171, 6, 98, 153, 183, 233, 31]),
+      ),
+      0,
+    )
+  ) {
+    return BracketChainInstruction.SetOracleConfig;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([187, 112, 163, 60, 214, 195, 226, 187]),
       ),
       0,
@@ -393,11 +457,17 @@ export type ParsedBracketChainInstruction<
   TProgram extends string = "3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ",
 > =
   | ({
+      instructionType: BracketChainInstruction.BindMatchFeed;
+    } & ParsedBindMatchFeedInstruction<TProgram>)
+  | ({
       instructionType: BracketChainInstruction.CancelTournament;
     } & ParsedCancelTournamentInstruction<TProgram>)
   | ({
       instructionType: BracketChainInstruction.ClaimResult;
     } & ParsedClaimResultInstruction<TProgram>)
+  | ({
+      instructionType: BracketChainInstruction.CommitMatchLobby;
+    } & ParsedCommitMatchLobbyInstruction<TProgram>)
   | ({
       instructionType: BracketChainInstruction.ConfirmResult;
     } & ParsedConfirmResultInstruction<TProgram>)
@@ -423,6 +493,9 @@ export type ParsedBracketChainInstruction<
       instructionType: BracketChainInstruction.ProposeResult;
     } & ParsedProposeResultInstruction<TProgram>)
   | ({
+      instructionType: BracketChainInstruction.ProposeResultOracle;
+    } & ParsedProposeResultOracleInstruction<TProgram>)
+  | ({
       instructionType: BracketChainInstruction.ReportResult;
     } & ParsedReportResultInstruction<TProgram>)
   | ({
@@ -435,6 +508,9 @@ export type ParsedBracketChainInstruction<
       instructionType: BracketChainInstruction.RevealSeed;
     } & ParsedRevealSeedInstruction<TProgram>)
   | ({
+      instructionType: BracketChainInstruction.SetOracleConfig;
+    } & ParsedSetOracleConfigInstruction<TProgram>)
+  | ({
       instructionType: BracketChainInstruction.SetSasConfig;
     } & ParsedSetSasConfigInstruction<TProgram>)
   | ({
@@ -446,6 +522,13 @@ export function parseBracketChainInstruction<TProgram extends string>(
 ): ParsedBracketChainInstruction<TProgram> {
   const instructionType = identifyBracketChainInstruction(instruction);
   switch (instructionType) {
+    case BracketChainInstruction.BindMatchFeed: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: BracketChainInstruction.BindMatchFeed,
+        ...parseBindMatchFeedInstruction(instruction),
+      };
+    }
     case BracketChainInstruction.CancelTournament: {
       assertIsInstructionWithAccounts(instruction);
       return {
@@ -458,6 +541,13 @@ export function parseBracketChainInstruction<TProgram extends string>(
       return {
         instructionType: BracketChainInstruction.ClaimResult,
         ...parseClaimResultInstruction(instruction),
+      };
+    }
+    case BracketChainInstruction.CommitMatchLobby: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: BracketChainInstruction.CommitMatchLobby,
+        ...parseCommitMatchLobbyInstruction(instruction),
       };
     }
     case BracketChainInstruction.ConfirmResult: {
@@ -516,6 +606,13 @@ export function parseBracketChainInstruction<TProgram extends string>(
         ...parseProposeResultInstruction(instruction),
       };
     }
+    case BracketChainInstruction.ProposeResultOracle: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: BracketChainInstruction.ProposeResultOracle,
+        ...parseProposeResultOracleInstruction(instruction),
+      };
+    }
     case BracketChainInstruction.ReportResult: {
       assertIsInstructionWithAccounts(instruction);
       return {
@@ -542,6 +639,13 @@ export function parseBracketChainInstruction<TProgram extends string>(
       return {
         instructionType: BracketChainInstruction.RevealSeed,
         ...parseRevealSeedInstruction(instruction),
+      };
+    }
+    case BracketChainInstruction.SetOracleConfig: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: BracketChainInstruction.SetOracleConfig,
+        ...parseSetOracleConfigInstruction(instruction),
       };
     }
     case BracketChainInstruction.SetSasConfig: {
@@ -587,6 +691,10 @@ export type BracketChainPluginAccounts = {
 };
 
 export type BracketChainPluginInstructions = {
+  bindMatchFeed: (
+    input: BindMatchFeedAsyncInput,
+  ) => ReturnType<typeof getBindMatchFeedInstructionAsync> &
+    SelfPlanAndSendFunctions;
   cancelTournament: (
     input: CancelTournamentAsyncInput,
   ) => ReturnType<typeof getCancelTournamentInstructionAsync> &
@@ -594,6 +702,10 @@ export type BracketChainPluginInstructions = {
   claimResult: (
     input: MakeOptional<ClaimResultAsyncInput, "payer">,
   ) => ReturnType<typeof getClaimResultInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  commitMatchLobby: (
+    input: CommitMatchLobbyInput,
+  ) => ReturnType<typeof getCommitMatchLobbyInstruction> &
     SelfPlanAndSendFunctions;
   confirmResult: (
     input: ConfirmResultAsyncInput,
@@ -627,6 +739,10 @@ export type BracketChainPluginInstructions = {
     input: ProposeResultInput,
   ) => ReturnType<typeof getProposeResultInstruction> &
     SelfPlanAndSendFunctions;
+  proposeResultOracle: (
+    input: ProposeResultOracleAsyncInput,
+  ) => ReturnType<typeof getProposeResultOracleInstructionAsync> &
+    SelfPlanAndSendFunctions;
   reportResult: (
     input: ReportResultAsyncInput,
   ) => ReturnType<typeof getReportResultInstructionAsync> &
@@ -641,6 +757,10 @@ export type BracketChainPluginInstructions = {
   revealSeed: (
     input: MakeOptional<RevealSeedInput, "payer">,
   ) => ReturnType<typeof getRevealSeedInstruction> & SelfPlanAndSendFunctions;
+  setOracleConfig: (
+    input: SetOracleConfigAsyncInput,
+  ) => ReturnType<typeof getSetOracleConfigInstructionAsync> &
+    SelfPlanAndSendFunctions;
   setSasConfig: (
     input: SetSasConfigAsyncInput,
   ) => ReturnType<typeof getSetSasConfigInstructionAsync> &
@@ -652,8 +772,8 @@ export type BracketChainPluginInstructions = {
 };
 
 export type BracketChainPluginPdas = {
-  vault: typeof findVaultPda;
   protocolConfig: typeof findProtocolConfigPda;
+  vault: typeof findVaultPda;
   tournament: typeof findTournamentPda;
   participant: typeof findParticipantPda;
 };
@@ -681,6 +801,11 @@ export function bracketChainProgram() {
           tournament: addSelfFetchFunctions(client, getTournamentCodec()),
         },
         instructions: {
+          bindMatchFeed: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getBindMatchFeedInstructionAsync(input),
+            ),
           cancelTournament: (input) =>
             addSelfPlanAndSendFunctions(
               client,
@@ -693,6 +818,11 @@ export function bracketChainProgram() {
                 ...input,
                 payer: input.payer ?? client.payer,
               }),
+            ),
+          commitMatchLobby: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getCommitMatchLobbyInstruction(input),
             ),
           confirmResult: (input) =>
             addSelfPlanAndSendFunctions(
@@ -737,6 +867,11 @@ export function bracketChainProgram() {
               client,
               getProposeResultInstruction(input),
             ),
+          proposeResultOracle: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getProposeResultOracleInstructionAsync(input),
+            ),
           reportResult: (input) =>
             addSelfPlanAndSendFunctions(
               client,
@@ -760,6 +895,11 @@ export function bracketChainProgram() {
                 payer: input.payer ?? client.payer,
               }),
             ),
+          setOracleConfig: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getSetOracleConfigInstructionAsync(input),
+            ),
           setSasConfig: (input) =>
             addSelfPlanAndSendFunctions(
               client,
@@ -772,8 +912,8 @@ export function bracketChainProgram() {
             ),
         },
         pdas: {
-          vault: findVaultPda,
           protocolConfig: findProtocolConfigPda,
+          vault: findVaultPda,
           tournament: findTournamentPda,
           participant: findParticipantPda,
         },

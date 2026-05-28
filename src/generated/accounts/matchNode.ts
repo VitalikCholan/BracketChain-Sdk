@@ -23,6 +23,8 @@ import {
   getBytesEncoder,
   getI64Decoder,
   getI64Encoder,
+  getOptionDecoder,
+  getOptionEncoder,
   getStructDecoder,
   getStructEncoder,
   getU16Decoder,
@@ -32,21 +34,27 @@ import {
   transformEncoder,
   type Account,
   type Address,
+  type Codec,
+  type Decoder,
   type EncodedAccount,
+  type Encoder,
   type FetchAccountConfig,
   type FetchAccountsConfig,
-  type FixedSizeCodec,
-  type FixedSizeDecoder,
-  type FixedSizeEncoder,
   type MaybeAccount,
   type MaybeEncodedAccount,
+  type Option,
+  type OptionOrNullable,
   type ReadonlyUint8Array,
 } from "@solana/kit";
 import {
+  getMatchCommitmentDecoder,
+  getMatchCommitmentEncoder,
   getMatchStatusDecoder,
   getMatchStatusEncoder,
   getProposalSourceDecoder,
   getProposalSourceEncoder,
+  type MatchCommitment,
+  type MatchCommitmentArgs,
   type MatchStatus,
   type MatchStatusArgs,
   type ProposalSource,
@@ -109,6 +117,17 @@ export type MatchNode = {
    * Surfaced by the indexer's notification kernel; not interpreted on-chain.
    */
   disputeReason: number;
+  /**
+   * Pre-match lobby/identity commitment, written by `commit_match_lobby`.
+   * `None` for OrganizerOnly / PlayerReported matches.
+   */
+  commitment: Option<MatchCommitment>;
+  /**
+   * Switchboard On-Demand `PullFeedAccountData` PDA bound by
+   * `bind_match_feed`; `propose_result_oracle` reads the winner from it.
+   * `Pubkey::default()` (zero) ⇒ no feed bound.
+   */
+  switchboardFeed: Address;
 };
 
 export type MatchNodeArgs = {
@@ -158,10 +177,21 @@ export type MatchNodeArgs = {
    * Surfaced by the indexer's notification kernel; not interpreted on-chain.
    */
   disputeReason: number;
+  /**
+   * Pre-match lobby/identity commitment, written by `commit_match_lobby`.
+   * `None` for OrganizerOnly / PlayerReported matches.
+   */
+  commitment: OptionOrNullable<MatchCommitmentArgs>;
+  /**
+   * Switchboard On-Demand `PullFeedAccountData` PDA bound by
+   * `bind_match_feed`; `propose_result_oracle` reads the winner from it.
+   * `Pubkey::default()` (zero) ⇒ no feed bound.
+   */
+  switchboardFeed: Address;
 };
 
 /** Gets the encoder for {@link MatchNodeArgs} account data. */
-export function getMatchNodeEncoder(): FixedSizeEncoder<MatchNodeArgs> {
+export function getMatchNodeEncoder(): Encoder<MatchNodeArgs> {
   return transformEncoder(
     getStructEncoder([
       ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
@@ -182,13 +212,15 @@ export function getMatchNodeEncoder(): FixedSizeEncoder<MatchNodeArgs> {
       ["claimDeadline", getI64Encoder()],
       ["disputed", getBooleanEncoder()],
       ["disputeReason", getU8Encoder()],
+      ["commitment", getOptionEncoder(getMatchCommitmentEncoder())],
+      ["switchboardFeed", getAddressEncoder()],
     ]),
     (value) => ({ ...value, discriminator: MATCH_NODE_DISCRIMINATOR }),
   );
 }
 
 /** Gets the decoder for {@link MatchNode} account data. */
-export function getMatchNodeDecoder(): FixedSizeDecoder<MatchNode> {
+export function getMatchNodeDecoder(): Decoder<MatchNode> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
     ["tournament", getAddressDecoder()],
@@ -208,11 +240,13 @@ export function getMatchNodeDecoder(): FixedSizeDecoder<MatchNode> {
     ["claimDeadline", getI64Decoder()],
     ["disputed", getBooleanDecoder()],
     ["disputeReason", getU8Decoder()],
+    ["commitment", getOptionDecoder(getMatchCommitmentDecoder())],
+    ["switchboardFeed", getAddressDecoder()],
   ]);
 }
 
 /** Gets the codec for {@link MatchNode} account data. */
-export function getMatchNodeCodec(): FixedSizeCodec<MatchNodeArgs, MatchNode> {
+export function getMatchNodeCodec(): Codec<MatchNodeArgs, MatchNode> {
   return combineCodec(getMatchNodeEncoder(), getMatchNodeDecoder());
 }
 
@@ -267,8 +301,4 @@ export async function fetchAllMaybeMatchNode(
 ): Promise<MaybeAccount<MatchNode>[]> {
   const maybeAccounts = await fetchEncodedAccounts(rpc, addresses, config);
   return maybeAccounts.map((maybeAccount) => decodeMatchNode(maybeAccount));
-}
-
-export function getMatchNodeSize(): number {
-  return 226;
 }

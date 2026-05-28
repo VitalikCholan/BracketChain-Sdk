@@ -6,8 +6,10 @@
  * @see https://github.com/codama-idl/codama
  */
 
+export * from "./bindMatchFeed";
 export * from "./cancelTournament";
 export * from "./claimResult";
+export * from "./commitMatchLobby";
 export * from "./confirmResult";
 export * from "./createTournament";
 export * from "./disputeResult";
@@ -16,9 +18,11 @@ export * from "./initializeProtocol";
 export * from "./joinTournament";
 export * from "./migrateV1Tournament";
 export * from "./proposeResult";
+export * from "./proposeResultOracle";
 export * from "./reportResult";
 export * from "./requestSeed";
 export * from "./resolveDispute";
 export * from "./revealSeed";
+export * from "./setOracleConfig";
 export * from "./setSasConfig";
 export * from "./startTournament";

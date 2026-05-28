@@ -137,6 +137,11 @@ export type Tournament = {
    * `start_tournament` for non-OrganizerOnly tournaments.
    */
   seedRevealed: boolean;
+  /**
+   * May dispute an Oracle proposal and call `resolve_dispute`. Defaults to
+   * `organizer` at create-time (Squads multisig reassignment is V1.3).
+   */
+  arbitrator: Address;
 };
 
 export type TournamentArgs = {
@@ -198,6 +203,11 @@ export type TournamentArgs = {
    * `start_tournament` for non-OrganizerOnly tournaments.
    */
   seedRevealed: boolean;
+  /**
+   * May dispute an Oracle proposal and call `resolve_dispute`. Defaults to
+   * `organizer` at create-time (Squads multisig reassignment is V1.3).
+   */
+  arbitrator: Address;
 };
 
 /** Gets the encoder for {@link TournamentArgs} account data. */
@@ -234,6 +244,7 @@ export function getTournamentEncoder(): Encoder<TournamentArgs> {
       ["vrfRandomnessAccount", getAddressEncoder()],
       ["vrfCommitSlot", getU64Encoder()],
       ["seedRevealed", getBooleanEncoder()],
+      ["arbitrator", getAddressEncoder()],
     ]),
     (value) => ({ ...value, discriminator: TOURNAMENT_DISCRIMINATOR }),
   );
@@ -272,6 +283,7 @@ export function getTournamentDecoder(): Decoder<Tournament> {
     ["vrfRandomnessAccount", getAddressDecoder()],
     ["vrfCommitSlot", getU64Decoder()],
     ["seedRevealed", getBooleanDecoder()],
+    ["arbitrator", getAddressDecoder()],
   ]);
 }
 

@@ -112,6 +112,18 @@ export const BRACKET_CHAIN_ERROR__SEED_ALREADY_REVEALED = 0x179e; // 6046
 export const BRACKET_CHAIN_ERROR__INVALID_TOURNAMENT_ACCOUNT = 0x179f; // 6047
 /** MigrationNotNeeded: Tournament account is already at the V1 layout; migration not needed */
 export const BRACKET_CHAIN_ERROR__MIGRATION_NOT_NEEDED = 0x17a0; // 6048
+/** MatchAlreadyCommitted: Match already has a lobby commitment */
+export const BRACKET_CHAIN_ERROR__MATCH_ALREADY_COMMITTED = 0x17a1; // 6049
+/** MatchNotCommitted: Match has no lobby commitment; commit before binding a feed */
+export const BRACKET_CHAIN_ERROR__MATCH_NOT_COMMITTED = 0x17a2; // 6050
+/** WrongFeedAccount: Switchboard feed account is not owned by the On-Demand program, or is on the wrong queue */
+export const BRACKET_CHAIN_ERROR__WRONG_FEED_ACCOUNT = 0x17a3; // 6051
+/** OracleWinnerNotInMatch: Oracle feed value did not match either committed player identity */
+export const BRACKET_CHAIN_ERROR__ORACLE_WINNER_NOT_IN_MATCH = 0x17a4; // 6052
+/** NotAuthorized: Signer is not authorized to dispute this Oracle proposal */
+export const BRACKET_CHAIN_ERROR__NOT_AUTHORIZED = 0x17a5; // 6053
+/** BadProposalSource: Proposal source is not valid for this action */
+export const BRACKET_CHAIN_ERROR__BAD_PROPOSAL_SOURCE = 0x17a6; // 6054
 
 export type BracketChainError =
   | typeof BRACKET_CHAIN_ERROR__ALREADY_REGISTERED
@@ -119,6 +131,7 @@ export type BracketChainError =
   | typeof BRACKET_CHAIN_ERROR__ATTESTATION_EXPIRED
   | typeof BRACKET_CHAIN_ERROR__ATTESTATION_REQUIRED
   | typeof BRACKET_CHAIN_ERROR__ATTESTATION_WALLET_MISMATCH
+  | typeof BRACKET_CHAIN_ERROR__BAD_PROPOSAL_SOURCE
   | typeof BRACKET_CHAIN_ERROR__CLAIM_WINDOW_NOT_ELAPSED
   | typeof BRACKET_CHAIN_ERROR__GAME_NOT_YET_SUPPORTED
   | typeof BRACKET_CHAIN_ERROR__INVALID_ATTESTATION_OWNER
@@ -132,7 +145,9 @@ export type BracketChainError =
   | typeof BRACKET_CHAIN_ERROR__INVALID_VAULT
   | typeof BRACKET_CHAIN_ERROR__MALFORMED_ATTESTATION
   | typeof BRACKET_CHAIN_ERROR__MALFORMED_RANDOMNESS
+  | typeof BRACKET_CHAIN_ERROR__MATCH_ALREADY_COMMITTED
   | typeof BRACKET_CHAIN_ERROR__MATCH_ALREADY_REPORTED
+  | typeof BRACKET_CHAIN_ERROR__MATCH_NOT_COMMITTED
   | typeof BRACKET_CHAIN_ERROR__MAX_PARTICIPANTS_EXCEEDED
   | typeof BRACKET_CHAIN_ERROR__MIGRATION_NOT_NEEDED
   | typeof BRACKET_CHAIN_ERROR__MIN_PARTICIPANTS_NOT_MET
@@ -140,10 +155,12 @@ export type BracketChainError =
   | typeof BRACKET_CHAIN_ERROR__NON_PARTICIPANT_WINNER
   | typeof BRACKET_CHAIN_ERROR__NO_PROPOSAL
   | typeof BRACKET_CHAIN_ERROR__NOT_ACTIVE
+  | typeof BRACKET_CHAIN_ERROR__NOT_AUTHORIZED
   | typeof BRACKET_CHAIN_ERROR__NOT_COMPLETED
   | typeof BRACKET_CHAIN_ERROR__NOT_COUNTERPARTY
   | typeof BRACKET_CHAIN_ERROR__NOT_IN_REGISTRATION
   | typeof BRACKET_CHAIN_ERROR__NOT_PLAYER_IN_MATCH
+  | typeof BRACKET_CHAIN_ERROR__ORACLE_WINNER_NOT_IN_MATCH
   | typeof BRACKET_CHAIN_ERROR__PARENT_MATCHES_NOT_COMPLETE
   | typeof BRACKET_CHAIN_ERROR__PRESET_EXCEEDS_PARTICIPANTS
   | typeof BRACKET_CHAIN_ERROR__PROPOSAL_ALREADY_EXISTS
@@ -162,7 +179,8 @@ export type BracketChainError =
   | typeof BRACKET_CHAIN_ERROR__TOURNAMENT_IN_PROGRESS
   | typeof BRACKET_CHAIN_ERROR__UNAUTHORIZED_AUTHORITY
   | typeof BRACKET_CHAIN_ERROR__WRONG_ATTESTATION_CREDENTIAL
-  | typeof BRACKET_CHAIN_ERROR__WRONG_ATTESTATION_SCHEMA;
+  | typeof BRACKET_CHAIN_ERROR__WRONG_ATTESTATION_SCHEMA
+  | typeof BRACKET_CHAIN_ERROR__WRONG_FEED_ACCOUNT;
 
 let bracketChainErrorMessages: Record<BracketChainError, string> | undefined;
 if (process.env["NODE_ENV"] !== "production") {
@@ -172,6 +190,7 @@ if (process.env["NODE_ENV"] !== "production") {
     [BRACKET_CHAIN_ERROR__ATTESTATION_EXPIRED]: `Attestation has expired`,
     [BRACKET_CHAIN_ERROR__ATTESTATION_REQUIRED]: `This game requires a SAS identity attestation to join`,
     [BRACKET_CHAIN_ERROR__ATTESTATION_WALLET_MISMATCH]: `Attestation nonce does not bind to the joining wallet`,
+    [BRACKET_CHAIN_ERROR__BAD_PROPOSAL_SOURCE]: `Proposal source is not valid for this action`,
     [BRACKET_CHAIN_ERROR__CLAIM_WINDOW_NOT_ELAPSED]: `Claim window has not elapsed yet`,
     [BRACKET_CHAIN_ERROR__GAME_NOT_YET_SUPPORTED]: `Selected game is not yet supported for tournament creation`,
     [BRACKET_CHAIN_ERROR__INVALID_ATTESTATION_OWNER]: `Attestation account is not owned by the SAS program`,
@@ -185,7 +204,9 @@ if (process.env["NODE_ENV"] !== "production") {
     [BRACKET_CHAIN_ERROR__INVALID_VAULT]: `Provided vault token account does not match the tournament vault`,
     [BRACKET_CHAIN_ERROR__MALFORMED_ATTESTATION]: `Attestation account data is malformed`,
     [BRACKET_CHAIN_ERROR__MALFORMED_RANDOMNESS]: `Randomness account data is malformed`,
+    [BRACKET_CHAIN_ERROR__MATCH_ALREADY_COMMITTED]: `Match already has a lobby commitment`,
     [BRACKET_CHAIN_ERROR__MATCH_ALREADY_REPORTED]: `Match has already been reported`,
+    [BRACKET_CHAIN_ERROR__MATCH_NOT_COMMITTED]: `Match has no lobby commitment; commit before binding a feed`,
     [BRACKET_CHAIN_ERROR__MAX_PARTICIPANTS_EXCEEDED]: `Participant count exceeds the protocol maximum (128)`,
     [BRACKET_CHAIN_ERROR__MIGRATION_NOT_NEEDED]: `Tournament account is already at the V1 layout; migration not needed`,
     [BRACKET_CHAIN_ERROR__MIN_PARTICIPANTS_NOT_MET]: `Participant count is below the protocol minimum (2)`,
@@ -193,10 +214,12 @@ if (process.env["NODE_ENV"] !== "production") {
     [BRACKET_CHAIN_ERROR__NON_PARTICIPANT_WINNER]: `Reported winner is not a participant of the tournament`,
     [BRACKET_CHAIN_ERROR__NO_PROPOSAL]: `Match has no pending proposal`,
     [BRACKET_CHAIN_ERROR__NOT_ACTIVE]: `Tournament is not in the Active state`,
+    [BRACKET_CHAIN_ERROR__NOT_AUTHORIZED]: `Signer is not authorized to dispute this Oracle proposal`,
     [BRACKET_CHAIN_ERROR__NOT_COMPLETED]: `Tournament is not in the Completed state`,
     [BRACKET_CHAIN_ERROR__NOT_COUNTERPARTY]: `Only the counterparty may confirm or dispute this proposal`,
     [BRACKET_CHAIN_ERROR__NOT_IN_REGISTRATION]: `Tournament is not in the Registration state`,
     [BRACKET_CHAIN_ERROR__NOT_PLAYER_IN_MATCH]: `Signer is not a player in this match`,
+    [BRACKET_CHAIN_ERROR__ORACLE_WINNER_NOT_IN_MATCH]: `Oracle feed value did not match either committed player identity`,
     [BRACKET_CHAIN_ERROR__PARENT_MATCHES_NOT_COMPLETE]: `Match parents not yet completed; cannot report this match`,
     [BRACKET_CHAIN_ERROR__PRESET_EXCEEDS_PARTICIPANTS]: `Selected payout preset requires more participants than configured`,
     [BRACKET_CHAIN_ERROR__PROPOSAL_ALREADY_EXISTS]: `Match already has a pending proposal`,
@@ -216,6 +239,7 @@ if (process.env["NODE_ENV"] !== "production") {
     [BRACKET_CHAIN_ERROR__UNAUTHORIZED_AUTHORITY]: `Caller is not the authorized authority for this action`,
     [BRACKET_CHAIN_ERROR__WRONG_ATTESTATION_CREDENTIAL]: `Attestation credential does not match the protocol's SAS credential`,
     [BRACKET_CHAIN_ERROR__WRONG_ATTESTATION_SCHEMA]: `Attestation schema does not match the game's SAS schema`,
+    [BRACKET_CHAIN_ERROR__WRONG_FEED_ACCOUNT]: `Switchboard feed account is not owned by the On-Demand program, or is on the wrong queue`,
   };
 }
 

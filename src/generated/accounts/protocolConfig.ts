@@ -25,6 +25,8 @@ import {
   getStructEncoder,
   getU16Decoder,
   getU16Encoder,
+  getU32Decoder,
+  getU32Encoder,
   getU8Decoder,
   getU8Encoder,
   transformEncoder,
@@ -75,6 +77,19 @@ export type ProtocolConfig = {
    * `set_sas_config`; unset slots are `Pubkey::default()`.
    */
   sasSchemas: Array<Address>;
+  /**
+   * Shared Switchboard On-Demand queue that bound feeds must belong to.
+   * (The On-Demand program id itself is the `SWITCHBOARD_ON_DEMAND_*`
+   * constant — not duplicated here.) Set via `set_oracle_config`.
+   */
+  switchboardQueue: Address;
+  /**
+   * Max age (slots) a feed value may have when read by
+   * `propose_result_oracle`. Default 100.
+   */
+  maxStaleSlots: number;
+  /** Minimum oracle samples required for a feed value. Default 5. */
+  minOracleSamples: number;
 };
 
 export type ProtocolConfigArgs = {
@@ -100,6 +115,19 @@ export type ProtocolConfigArgs = {
    * `set_sas_config`; unset slots are `Pubkey::default()`.
    */
   sasSchemas: Array<Address>;
+  /**
+   * Shared Switchboard On-Demand queue that bound feeds must belong to.
+   * (The On-Demand program id itself is the `SWITCHBOARD_ON_DEMAND_*`
+   * constant — not duplicated here.) Set via `set_oracle_config`.
+   */
+  switchboardQueue: Address;
+  /**
+   * Max age (slots) a feed value may have when read by
+   * `propose_result_oracle`. Default 100.
+   */
+  maxStaleSlots: number;
+  /** Minimum oracle samples required for a feed value. Default 5. */
+  minOracleSamples: number;
 };
 
 /** Gets the encoder for {@link ProtocolConfigArgs} account data. */
@@ -114,6 +142,9 @@ export function getProtocolConfigEncoder(): FixedSizeEncoder<ProtocolConfigArgs>
       ["bump", getU8Encoder()],
       ["sasCredential", getAddressEncoder()],
       ["sasSchemas", getArrayEncoder(getAddressEncoder(), { size: 5 })],
+      ["switchboardQueue", getAddressEncoder()],
+      ["maxStaleSlots", getU32Encoder()],
+      ["minOracleSamples", getU32Encoder()],
     ]),
     (value) => ({ ...value, discriminator: PROTOCOL_CONFIG_DISCRIMINATOR }),
   );
@@ -130,6 +161,9 @@ export function getProtocolConfigDecoder(): FixedSizeDecoder<ProtocolConfig> {
     ["bump", getU8Decoder()],
     ["sasCredential", getAddressDecoder()],
     ["sasSchemas", getArrayDecoder(getAddressDecoder(), { size: 5 })],
+    ["switchboardQueue", getAddressDecoder()],
+    ["maxStaleSlots", getU32Decoder()],
+    ["minOracleSamples", getU32Decoder()],
   ]);
 }
 
@@ -203,5 +237,5 @@ export async function fetchAllMaybeProtocolConfig(
 }
 
 export function getProtocolConfigSize(): number {
-  return 299;
+  return 339;
 }
