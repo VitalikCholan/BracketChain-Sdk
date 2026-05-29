@@ -106,7 +106,8 @@ const result = await createTournament(client, {
   name: "Friday Night CS2",               // ≤ 32 bytes (UTF-8)
   entryFee: 1_000_000n,                   // 1 USDC (6 decimals) — bigint or number
   maxParticipants: 16,
-  payoutPreset: PayoutPreset.Standard,    // numeric enum: WinnerTakesAll | Standard | Deep
+  payoutPreset: { __kind: "Standard" },   // data-enum: { __kind: "WinnerTakesAll" | "Standard" | "Deep" }
+                                          // or arbitrary: { __kind: "Custom", fields: [[5000,3000,2000,0,0,0,0,0]] }
   registrationDeadline: BigInt(Math.floor(Date.now() / 1000) + 3600),
   organizerDeposit: 0n,                   // optional top-up to prize pool (refundable)
   // V1.1 options (all optional, with safe defaults):
@@ -305,6 +306,7 @@ All methods accept an `AbortSignal` for cancellation. BigInt fields arrive as de
 | `joinTournament(client, params)` | `join_tournament` |
 | `startTournament(client, params)` | `start_tournament` (chunked — 7 matches per chunk; SDK handles the chunk loop, bracket descriptor build, byes, and per-tx compute-budget overrides) |
 | `cancelTournament(client, params)` | `cancel_tournament` (pre-start; organizer flips status to Cancelled, then any signer drives idempotent refund chunks + organizer-deposit return) |
+| `partialCancelTournament(client, params)` | `partial_cancel_tournament` (organizer-only, mid-`Active`; flips status to `PartialCancelled` and freezes the bracket — refunds then run via `partialRefundChunk`) |
 | `partialRefundChunk(client, params)` | `partial_refund_chunk` (permissionless, idempotent full-refund chunks for a `PartialCancelled` tournament — Policy A) |
 | `closeTournament(client, params)` | `close_tournament` (permissionless rent reclaim for a terminal tournament — closes child PDAs in chunks, then optionally vault + Tournament PDA) |
 
@@ -370,16 +372,16 @@ const [matchPda] = await findMatchPda({ tournament: tournamentPda, round: 0, mat
 
 ```ts
 import {
-  TournamentStatus,   // Registration | PendingBracketInit | Active | Completed | Cancelled
+  TournamentStatus,   // Registration | PendingBracketInit | Active | Completed | Cancelled | PartialCancelled
   MatchStatus,        // Pending | Active | Completed
-  PayoutPreset,       // 0 WinnerTakesAll | 1 Standard | 2 Deep
+  PayoutPreset,       // data-enum: { __kind: "WinnerTakesAll" | "Standard" | "Deep" | "Custom" }
   SettlementMode,     // 0 OrganizerOnly | 1 PlayerReported | 2 Oracle
   SupportedGame,      // 0 Manual | 1 Dota2 | 2 Cs2Faceit | 3 Valorant | 4 LoL
   ProposalSource,     // 0 None | 1 Player | 2 Oracle | 3 GameServer
 } from "@bracketchain/sdk";
 
 if (tournament.status === TournamentStatus.Active) { /* ... */ }
-const payoutPreset = PayoutPreset.Standard;
+const payoutPreset = { __kind: "Standard" } as const;   // or { __kind: "Custom", fields: [[...8 bps...]] }
 ```
 
 Codama emits plain numeric enums — no Anchor-style `{ active: {} }` tagged objects, no `getEnumKind` helper.
@@ -452,7 +454,7 @@ A single `rpcSubscriptions.accountNotifications` subscription per PDA (Tournamen
 
 The on-chain client tree (accounts, instructions, decoders, declared PDA finders) lives under `src/generated/` and is produced from the program's Anchor IDL by [Codama](https://github.com/codama-idl/codama). It is **committed to the repo**, not generated at install time, so consumers can `pnpm add @bracketchain/sdk` without an IDL pipeline. To regenerate after a program redeploy, re-run Codama against the new IDL (the recipe lives in the program repo) and commit the diff.
 
-A handful of methods (`closeTournament`, `partialRefundChunk`) hand-build their instruction with the discriminator + account layout because the codama client doesn't yet emit a generated builder for them — those move onto the generated path at the next regen.
+A handful of methods (`closeTournament`, `partialCancelTournament`, `partialRefundChunk`) hand-build their instruction with the discriminator + account layout. As of the Stage F codama regen the generated builders for these now exist in `src/generated/`; the method wrappers will migrate onto them in a follow-up (the hand-built layout is verified against the same IDL, so behaviour is identical).
 
 ### Anchor → Kit migration (0.3.x → 0.4.0)
 
@@ -464,7 +466,7 @@ Breaking changes from the original Anchor SDK:
 | `PublicKey` everywhere | `Address` (Kit branded string) |
 | `new BN(x)` for u64 | `bigint` (e.g. `1_000_000n`) or `number` |
 | `{ active: {} }` enum tag objects | Numeric enum: `TournamentStatus.Active` |
-| `payoutPreset("standard")` helper | `PayoutPreset.Standard` (numeric enum value) |
+| `payoutPreset("standard")` helper | `{ __kind: "Standard" }` (Codama data-enum; `Custom` carries `fields: [[u16; 8]]`) |
 | `getEnumKind(tournament.status)` | `tournament.status === TournamentStatus.Active` |
 | `result.tournamentPda.toBase58()` | `result.tournamentPda` (already a base58 string) |
 | PDA helpers sync, return `[PublicKey, number]` | All `async`, return `ProgramDerivedAddress` (`[Address, number]`) |

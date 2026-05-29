@@ -111,6 +111,11 @@ export type MigrateProtocolConfigAsyncInput<
   TAccountSystemProgram extends string = string,
 > = {
   authority: TransactionSigner<TAccountAuthority>;
+  /**
+   * layout (107 bytes) is shorter than the current INIT_SPACE and would
+   * fail Anchor's deserialization. Program ownership + discriminator +
+   * authority are validated below.
+   */
   protocolConfig?: Address<TAccountProtocolConfig>;
   systemProgram?: Address<TAccountSystemProgram>;
 };
@@ -182,6 +187,11 @@ export type MigrateProtocolConfigInput<
   TAccountSystemProgram extends string = string,
 > = {
   authority: TransactionSigner<TAccountAuthority>;
+  /**
+   * layout (107 bytes) is shorter than the current INIT_SPACE and would
+   * fail Anchor's deserialization. Program ownership + discriminator +
+   * authority are validated below.
+   */
   protocolConfig: Address<TAccountProtocolConfig>;
   systemProgram?: Address<TAccountSystemProgram>;
 };
@@ -249,6 +259,11 @@ export type ParsedMigrateProtocolConfigInstruction<
   programAddress: Address<TProgram>;
   accounts: {
     authority: TAccountMetas[0];
+    /**
+     * layout (107 bytes) is shorter than the current INIT_SPACE and would
+     * fail Anchor's deserialization. Program ownership + discriminator +
+     * authority are validated below.
+     */
     protocolConfig: TAccountMetas[1];
     systemProgram: TAccountMetas[2];
   };

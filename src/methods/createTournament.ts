@@ -43,11 +43,21 @@ const MIN_PARTICIPANTS = 2;
 const MAX_PARTICIPANTS = 128;
 
 // Per-preset minimum players. Mirrors `PayoutPreset::min_participants()`.
-const PRESET_MIN_PARTICIPANTS: Record<PayoutPreset, number> = {
-  [PayoutPreset.WinnerTakesAll]: 1,
-  [PayoutPreset.Standard]: 3,
-  [PayoutPreset.Deep]: 7,
-};
+// `Custom` = the number of funded (non-zero) placement slots (= placement_count).
+function presetMinParticipants(preset: PayoutPreset): number | undefined {
+  switch (preset.__kind) {
+    case "WinnerTakesAll":
+      return 1;
+    case "Standard":
+      return 3;
+    case "Deep":
+      return 7;
+    case "Custom":
+      return preset.fields[0].filter((bps) => bps > 0).length;
+    default:
+      return undefined;
+  }
+}
 
 export interface CreateTournamentConfig {
   /** UTF-8 name, ≤32 bytes (not characters). Used in the tournament PDA seed. */
@@ -56,7 +66,11 @@ export interface CreateTournamentConfig {
   entryFee: bigint | number;
   /** Hard cap, [2, 128]. Bracket size derives from this at start time. */
   maxParticipants: number;
-  /** Payout preset — Codama enum `PayoutPreset.{WinnerTakesAll,Standard,Deep}`. */
+  /**
+   * Payout preset — Codama data-enum. Fixed presets:
+   * `{ __kind: "WinnerTakesAll" | "Standard" | "Deep" }`; arbitrary split:
+   * `{ __kind: "Custom", fields: [[u16; 8]] }` (bps summing to 10_000).
+   */
   payoutPreset: PayoutPreset;
   /** Unix timestamp (seconds). Must be strictly greater than the on-chain clock at submit time. */
   registrationDeadline: bigint | number;
@@ -142,10 +156,10 @@ export async function createTournament(
   if (config.maxParticipants > MAX_PARTICIPANTS)
     throw new MaxParticipantsExceededError();
 
-  const presetMin = PRESET_MIN_PARTICIPANTS[config.payoutPreset];
+  const presetMin = presetMinParticipants(config.payoutPreset);
   if (presetMin === undefined) {
     throw new BracketChainSDKError(
-      `Unknown payout preset variant: ${String(config.payoutPreset)}`,
+      `Unknown payout preset variant: ${String(config.payoutPreset.__kind)}`,
       "InvalidArgument",
     );
   }

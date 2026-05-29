@@ -9,6 +9,7 @@
 export * from "./bindMatchFeed";
 export * from "./cancelTournament";
 export * from "./claimResult";
+export * from "./closeTournament";
 export * from "./commitMatchLobby";
 export * from "./confirmResult";
 export * from "./createTournament";
@@ -18,6 +19,8 @@ export * from "./initializeProtocol";
 export * from "./joinTournament";
 export * from "./migrateProtocolConfig";
 export * from "./migrateV1Tournament";
+export * from "./partialCancelTournament";
+export * from "./partialRefundChunk";
 export * from "./proposeResult";
 export * from "./proposeResultOracle";
 export * from "./reportResult";

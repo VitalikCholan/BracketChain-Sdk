@@ -124,6 +124,8 @@ export const BRACKET_CHAIN_ERROR__ORACLE_WINNER_NOT_IN_MATCH = 0x17a4; // 6052
 export const BRACKET_CHAIN_ERROR__NOT_AUTHORIZED = 0x17a5; // 6053
 /** BadProposalSource: Proposal source is not valid for this action */
 export const BRACKET_CHAIN_ERROR__BAD_PROPOSAL_SOURCE = 0x17a6; // 6054
+/** InvalidCustomPayout: Custom payout split is invalid (bps must sum to 10000, be gapless, and fund the winner) */
+export const BRACKET_CHAIN_ERROR__INVALID_CUSTOM_PAYOUT = 0x17a7; // 6055
 
 export type BracketChainError =
   | typeof BRACKET_CHAIN_ERROR__ALREADY_REGISTERED
@@ -135,6 +137,7 @@ export type BracketChainError =
   | typeof BRACKET_CHAIN_ERROR__CLAIM_WINDOW_NOT_ELAPSED
   | typeof BRACKET_CHAIN_ERROR__GAME_NOT_YET_SUPPORTED
   | typeof BRACKET_CHAIN_ERROR__INVALID_ATTESTATION_OWNER
+  | typeof BRACKET_CHAIN_ERROR__INVALID_CUSTOM_PAYOUT
   | typeof BRACKET_CHAIN_ERROR__INVALID_MATCH_INDEX
   | typeof BRACKET_CHAIN_ERROR__INVALID_PAYOUT_PRESET
   | typeof BRACKET_CHAIN_ERROR__INVALID_PROPOSED_WINNER
@@ -194,6 +197,7 @@ if (process.env["NODE_ENV"] !== "production") {
     [BRACKET_CHAIN_ERROR__CLAIM_WINDOW_NOT_ELAPSED]: `Claim window has not elapsed yet`,
     [BRACKET_CHAIN_ERROR__GAME_NOT_YET_SUPPORTED]: `Selected game is not yet supported for tournament creation`,
     [BRACKET_CHAIN_ERROR__INVALID_ATTESTATION_OWNER]: `Attestation account is not owned by the SAS program`,
+    [BRACKET_CHAIN_ERROR__INVALID_CUSTOM_PAYOUT]: `Custom payout split is invalid (bps must sum to 10000, be gapless, and fund the winner)`,
     [BRACKET_CHAIN_ERROR__INVALID_MATCH_INDEX]: `Match referenced is outside the bracket`,
     [BRACKET_CHAIN_ERROR__INVALID_PAYOUT_PRESET]: `Selected payout preset is invalid`,
     [BRACKET_CHAIN_ERROR__INVALID_PROPOSED_WINNER]: `Proposed winner is not a player in this match`,

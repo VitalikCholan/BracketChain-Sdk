@@ -51,6 +51,7 @@ import {
   getBindMatchFeedInstructionAsync,
   getCancelTournamentInstructionAsync,
   getClaimResultInstructionAsync,
+  getCloseTournamentInstructionAsync,
   getCommitMatchLobbyInstruction,
   getConfirmResultInstructionAsync,
   getCreateTournamentInstructionAsync,
@@ -60,6 +61,8 @@ import {
   getJoinTournamentInstructionAsync,
   getMigrateProtocolConfigInstructionAsync,
   getMigrateV1TournamentInstructionAsync,
+  getPartialCancelTournamentInstruction,
+  getPartialRefundChunkInstructionAsync,
   getProposeResultInstruction,
   getProposeResultOracleInstructionAsync,
   getReportResultInstructionAsync,
@@ -72,6 +75,7 @@ import {
   parseBindMatchFeedInstruction,
   parseCancelTournamentInstruction,
   parseClaimResultInstruction,
+  parseCloseTournamentInstruction,
   parseCommitMatchLobbyInstruction,
   parseConfirmResultInstruction,
   parseCreateTournamentInstruction,
@@ -81,6 +85,8 @@ import {
   parseJoinTournamentInstruction,
   parseMigrateProtocolConfigInstruction,
   parseMigrateV1TournamentInstruction,
+  parsePartialCancelTournamentInstruction,
+  parsePartialRefundChunkInstruction,
   parseProposeResultInstruction,
   parseProposeResultOracleInstruction,
   parseReportResultInstruction,
@@ -93,6 +99,7 @@ import {
   type BindMatchFeedAsyncInput,
   type CancelTournamentAsyncInput,
   type ClaimResultAsyncInput,
+  type CloseTournamentAsyncInput,
   type CommitMatchLobbyInput,
   type ConfirmResultAsyncInput,
   type CreateTournamentAsyncInput,
@@ -105,6 +112,7 @@ import {
   type ParsedBindMatchFeedInstruction,
   type ParsedCancelTournamentInstruction,
   type ParsedClaimResultInstruction,
+  type ParsedCloseTournamentInstruction,
   type ParsedCommitMatchLobbyInstruction,
   type ParsedConfirmResultInstruction,
   type ParsedCreateTournamentInstruction,
@@ -114,6 +122,8 @@ import {
   type ParsedJoinTournamentInstruction,
   type ParsedMigrateProtocolConfigInstruction,
   type ParsedMigrateV1TournamentInstruction,
+  type ParsedPartialCancelTournamentInstruction,
+  type ParsedPartialRefundChunkInstruction,
   type ParsedProposeResultInstruction,
   type ParsedProposeResultOracleInstruction,
   type ParsedReportResultInstruction,
@@ -123,6 +133,8 @@ import {
   type ParsedSetOracleConfigInstruction,
   type ParsedSetSasConfigInstruction,
   type ParsedStartTournamentInstruction,
+  type PartialCancelTournamentInput,
+  type PartialRefundChunkAsyncInput,
   type ProposeResultInput,
   type ProposeResultOracleAsyncInput,
   type ReportResultAsyncInput,
@@ -208,6 +220,7 @@ export enum BracketChainInstruction {
   BindMatchFeed,
   CancelTournament,
   ClaimResult,
+  CloseTournament,
   CommitMatchLobby,
   ConfirmResult,
   CreateTournament,
@@ -217,6 +230,8 @@ export enum BracketChainInstruction {
   JoinTournament,
   MigrateProtocolConfig,
   MigrateV1Tournament,
+  PartialCancelTournament,
+  PartialRefundChunk,
   ProposeResult,
   ProposeResultOracle,
   ReportResult,
@@ -264,6 +279,17 @@ export function identifyBracketChainInstruction(
     )
   ) {
     return BracketChainInstruction.ClaimResult;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([14, 80, 54, 9, 221, 239, 201, 35]),
+      ),
+      0,
+    )
+  ) {
+    return BracketChainInstruction.CloseTournament;
   }
   if (
     containsBytes(
@@ -363,6 +389,28 @@ export function identifyBracketChainInstruction(
     )
   ) {
     return BracketChainInstruction.MigrateV1Tournament;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([194, 241, 74, 25, 111, 229, 230, 141]),
+      ),
+      0,
+    )
+  ) {
+    return BracketChainInstruction.PartialCancelTournament;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([145, 61, 45, 143, 170, 57, 149, 244]),
+      ),
+      0,
+    )
+  ) {
+    return BracketChainInstruction.PartialRefundChunk;
   }
   if (
     containsBytes(
@@ -482,6 +530,9 @@ export type ParsedBracketChainInstruction<
       instructionType: BracketChainInstruction.ClaimResult;
     } & ParsedClaimResultInstruction<TProgram>)
   | ({
+      instructionType: BracketChainInstruction.CloseTournament;
+    } & ParsedCloseTournamentInstruction<TProgram>)
+  | ({
       instructionType: BracketChainInstruction.CommitMatchLobby;
     } & ParsedCommitMatchLobbyInstruction<TProgram>)
   | ({
@@ -508,6 +559,12 @@ export type ParsedBracketChainInstruction<
   | ({
       instructionType: BracketChainInstruction.MigrateV1Tournament;
     } & ParsedMigrateV1TournamentInstruction<TProgram>)
+  | ({
+      instructionType: BracketChainInstruction.PartialCancelTournament;
+    } & ParsedPartialCancelTournamentInstruction<TProgram>)
+  | ({
+      instructionType: BracketChainInstruction.PartialRefundChunk;
+    } & ParsedPartialRefundChunkInstruction<TProgram>)
   | ({
       instructionType: BracketChainInstruction.ProposeResult;
     } & ParsedProposeResultInstruction<TProgram>)
@@ -560,6 +617,13 @@ export function parseBracketChainInstruction<TProgram extends string>(
       return {
         instructionType: BracketChainInstruction.ClaimResult,
         ...parseClaimResultInstruction(instruction),
+      };
+    }
+    case BracketChainInstruction.CloseTournament: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: BracketChainInstruction.CloseTournament,
+        ...parseCloseTournamentInstruction(instruction),
       };
     }
     case BracketChainInstruction.CommitMatchLobby: {
@@ -623,6 +687,20 @@ export function parseBracketChainInstruction<TProgram extends string>(
       return {
         instructionType: BracketChainInstruction.MigrateV1Tournament,
         ...parseMigrateV1TournamentInstruction(instruction),
+      };
+    }
+    case BracketChainInstruction.PartialCancelTournament: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: BracketChainInstruction.PartialCancelTournament,
+        ...parsePartialCancelTournamentInstruction(instruction),
+      };
+    }
+    case BracketChainInstruction.PartialRefundChunk: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: BracketChainInstruction.PartialRefundChunk,
+        ...parsePartialRefundChunkInstruction(instruction),
       };
     }
     case BracketChainInstruction.ProposeResult: {
@@ -729,6 +807,10 @@ export type BracketChainPluginInstructions = {
     input: MakeOptional<ClaimResultAsyncInput, "payer">,
   ) => ReturnType<typeof getClaimResultInstructionAsync> &
     SelfPlanAndSendFunctions;
+  closeTournament: (
+    input: CloseTournamentAsyncInput,
+  ) => ReturnType<typeof getCloseTournamentInstructionAsync> &
+    SelfPlanAndSendFunctions;
   commitMatchLobby: (
     input: CommitMatchLobbyInput,
   ) => ReturnType<typeof getCommitMatchLobbyInstruction> &
@@ -764,6 +846,14 @@ export type BracketChainPluginInstructions = {
   migrateV1Tournament: (
     input: MigrateV1TournamentAsyncInput,
   ) => ReturnType<typeof getMigrateV1TournamentInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  partialCancelTournament: (
+    input: PartialCancelTournamentInput,
+  ) => ReturnType<typeof getPartialCancelTournamentInstruction> &
+    SelfPlanAndSendFunctions;
+  partialRefundChunk: (
+    input: PartialRefundChunkAsyncInput,
+  ) => ReturnType<typeof getPartialRefundChunkInstructionAsync> &
     SelfPlanAndSendFunctions;
   proposeResult: (
     input: ProposeResultInput,
@@ -849,6 +939,11 @@ export function bracketChainProgram() {
                 payer: input.payer ?? client.payer,
               }),
             ),
+          closeTournament: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getCloseTournamentInstructionAsync(input),
+            ),
           commitMatchLobby: (input) =>
             addSelfPlanAndSendFunctions(
               client,
@@ -896,6 +991,16 @@ export function bracketChainProgram() {
             addSelfPlanAndSendFunctions(
               client,
               getMigrateV1TournamentInstructionAsync(input),
+            ),
+          partialCancelTournament: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getPartialCancelTournamentInstruction(input),
+            ),
+          partialRefundChunk: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getPartialRefundChunkInstructionAsync(input),
             ),
           proposeResult: (input) =>
             addSelfPlanAndSendFunctions(

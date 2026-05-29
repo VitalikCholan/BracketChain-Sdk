@@ -235,17 +235,21 @@ export async function buildFinalizeContext(
   };
 }
 
+// Mirrors `PayoutPreset::placement_count()` — the number of funded placements.
+// `Custom` counts its non-zero bps slots.
 export function getPlacementCount(preset: PayoutPreset): number {
-  switch (preset) {
-    case PayoutPreset.WinnerTakesAll:
+  switch (preset.__kind) {
+    case "WinnerTakesAll":
       return 1;
-    case PayoutPreset.Standard:
+    case "Standard":
       return 3;
-    case PayoutPreset.Deep:
+    case "Deep":
       return 7;
+    case "Custom":
+      return preset.fields[0].filter((bps) => bps > 0).length;
     default:
       throw new BracketChainSDKError(
-        `Unknown payout preset: ${String(preset)}`,
+        `Unknown payout preset: ${String((preset as { __kind?: string }).__kind)}`,
         "InvalidArgument",
       );
   }
