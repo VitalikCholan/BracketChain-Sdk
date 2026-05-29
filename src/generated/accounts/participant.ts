@@ -59,7 +59,8 @@ export type Participant = {
   refundPaid: boolean;
   bump: number;
   /**
-   * keccak hash of the SAS attestation's `identity_bytes`. Zero-bytes for
+   * The SAS attestation's 32-byte `identity_bytes`, stored verbatim (the issuer
+   * fingerprint = SHA-256(steam_id_64 LE); no on-chain hashing). Zero-bytes for
    * `Manual`-game tournaments (no attestation required).
    */
   identityHash: ReadonlyUint8Array;
@@ -85,7 +86,8 @@ export type ParticipantArgs = {
   refundPaid: boolean;
   bump: number;
   /**
-   * keccak hash of the SAS attestation's `identity_bytes`. Zero-bytes for
+   * The SAS attestation's 32-byte `identity_bytes`, stored verbatim (the issuer
+   * fingerprint = SHA-256(steam_id_64 LE); no on-chain hashing). Zero-bytes for
    * `Manual`-game tournaments (no attestation required).
    */
   identityHash: ReadonlyUint8Array;

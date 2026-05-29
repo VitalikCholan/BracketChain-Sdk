@@ -51,6 +51,14 @@ export type IndexerSettlementMode =
   | "PlayerReported"
   | "Oracle";
 
+/** On-chain `SupportedGame` as served by the indexer. */
+export type IndexerGame =
+  | "Manual"
+  | "Dota2"
+  | "Cs2Faceit"
+  | "Valorant"
+  | "LoL";
+
 /** Source of a match-result proposal, mirroring the on-chain `ProposalSource`. */
 export type IndexerProposalSource =
   | "None"
@@ -80,6 +88,13 @@ export interface IndexerTournament {
    * the result flow: organizer-report vs player-reported.
    */
   settlementMode: IndexerSettlementMode | null;
+  /**
+   * On-chain game (V1.1). Like `settlementMode`, carried by no event and
+   * backfilled set-once from chain by the reconciliation cron — `null` only on
+   * freshly-indexed rows before the first reconcile. Frontend treats `null` as
+   * `Manual` and uses this to gate the Steam-link requirement on join (A-11).
+   */
+  game: IndexerGame | null;
   champion: string | null;
   grossPool: string | null;
   feeAmount: string | null;
@@ -134,7 +149,7 @@ export interface IndexerParticipant {
   losses: number;
   pointsFor: number;
   pointsAgainst: number;
-  /** keccak hash (hex) of the SAS attestation identity bytes; null for Manual games. */
+  /** SAS attestation identity bytes (hex) — SHA-256(steam_id_64 LE), stored verbatim; null for Manual games. */
   identityHash: string | null;
 }
 
