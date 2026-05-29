@@ -29,6 +29,12 @@ export type {
   CancelTournamentResult,
 } from "./cancelTournament";
 
+export { closeTournament } from "./closeTournament";
+export type {
+  CloseTournamentParams,
+  CloseTournamentResult,
+} from "./closeTournament";
+
 export { startTournament } from "./startTournament";
 export type {
   StartTournamentParams,
