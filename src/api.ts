@@ -24,7 +24,8 @@ export type IndexerTournamentStatus =
   | "PendingBracketInit"
   | "Active"
   | "Completed"
-  | "Cancelled";
+  | "Cancelled"
+  | "PartialCancelled";
 
 export type IndexerPayoutPreset = "WinnerTakesAll" | "Standard" | "Deep";
 

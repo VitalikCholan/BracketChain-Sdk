@@ -35,6 +35,12 @@ export type {
   CloseTournamentResult,
 } from "./closeTournament";
 
+export { partialRefundChunk } from "./partialRefundChunk";
+export type {
+  PartialRefundChunkParams,
+  PartialRefundChunkResult,
+} from "./partialRefundChunk";
+
 export { startTournament } from "./startTournament";
 export type {
   StartTournamentParams,
