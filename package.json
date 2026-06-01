@@ -35,6 +35,7 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test",
     "prepublishOnly": "pnpm build"
   },
   "devDependencies": {
