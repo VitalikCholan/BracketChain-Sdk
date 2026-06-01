@@ -155,9 +155,13 @@ export type {
 // Errors — base class + every typed subclass + the mapError helper
 export {
   AlreadyRegisteredError,
+  AttestationRequiredError,
   BracketChainSDKError,
+  ClaimWindowNotElapsedError,
+  GameNotSupportedError,
   InsufficientBalanceError,
   InsufficientFundsError,
+  InvalidAttestationError,
   InvalidMatchError,
   InvalidPayoutPresetError,
   InvalidTokenMintError,
@@ -168,6 +172,8 @@ export {
   NonParticipantWinnerError,
   ProtocolNotInitializedError,
   RegistrationClosedError,
+  SeedNotRevealedError,
+  SettlementModeError,
   TournamentFullError,
   TournamentInProgressError,
   TournamentNameTakenError,
