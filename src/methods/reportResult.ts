@@ -225,6 +225,17 @@ async function reportFinal(
     tokenProgram: TOKEN_PROGRAM_ADDRESS,
   });
 
+  // Organizer ATA — required as a NAMED account when `organizer_deposit > 0`,
+  // so the on-chain `refund_organizer_deposit` (Variant A) can return the
+  // excluded deposit on the final match. Omitting it makes the program fail
+  // with `InvalidVault`. The deposit==0 case skips this (on-chain early-return).
+  const needsOrganizerAta = tournament.organizerDeposit > 0n;
+  const [organizerAta] = await findAssociatedTokenPda({
+    owner: tournament.organizer,
+    mint: tokenMint,
+    tokenProgram: TOKEN_PROGRAM_ADDRESS,
+  });
+
   // Idempotently create every ATA we depend on (winner placements + treasury).
   const dedupeSet = new Set<Address>();
   const ataInstructions = [];
@@ -251,6 +262,17 @@ async function reportFinal(
       }),
     );
   }
+  if (needsOrganizerAta && !dedupeSet.has(organizerAta)) {
+    dedupeSet.add(organizerAta);
+    ataInstructions.push(
+      await getCreateAssociatedTokenIdempotentInstructionAsync({
+        payer: signer,
+        owner: tournament.organizer,
+        mint: tokenMint,
+        ata: organizerAta,
+      }),
+    );
+  }
 
   const remainingAccounts: AccountMeta[] = [
     ...placementAtas.map(({ ata }) => ({
@@ -268,6 +290,7 @@ async function reportFinal(
     matchAccount: matchPda,
     protocolConfig: protocolConfigPda,
     vault: vaultPda,
+    organizerTokenAccount: needsOrganizerAta ? organizerAta : undefined,
     winner: params.winner,
     placements,
   });
