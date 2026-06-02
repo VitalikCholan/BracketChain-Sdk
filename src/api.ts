@@ -116,6 +116,12 @@ export interface IndexerTournament {
    * deferred to V1.3. Null on pre-V1.2 rows that haven't been reconciled yet.
    */
   arbitrator: string | null;
+  /**
+   * Live participant count from the indexer DB (Participant table row count,
+   * excluding cancelled/refunded participants). Absent on responses from indexer
+   * versions prior to this field — treat undefined as 0.
+   */
+  participantCount?: number;
 }
 
 export interface IndexerPayout {

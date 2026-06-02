@@ -71,6 +71,7 @@ import {
   getRevealSeedInstruction,
   getSetOracleConfigInstructionAsync,
   getSetSasConfigInstructionAsync,
+  getSettleFinalInstructionAsync,
   getStartTournamentInstruction,
   parseBindMatchFeedInstruction,
   parseCancelTournamentInstruction,
@@ -95,6 +96,7 @@ import {
   parseRevealSeedInstruction,
   parseSetOracleConfigInstruction,
   parseSetSasConfigInstruction,
+  parseSettleFinalInstruction,
   parseStartTournamentInstruction,
   type BindMatchFeedAsyncInput,
   type CancelTournamentAsyncInput,
@@ -132,6 +134,7 @@ import {
   type ParsedRevealSeedInstruction,
   type ParsedSetOracleConfigInstruction,
   type ParsedSetSasConfigInstruction,
+  type ParsedSettleFinalInstruction,
   type ParsedStartTournamentInstruction,
   type PartialCancelTournamentInput,
   type PartialRefundChunkAsyncInput,
@@ -143,6 +146,7 @@ import {
   type RevealSeedInput,
   type SetOracleConfigAsyncInput,
   type SetSasConfigAsyncInput,
+  type SettleFinalAsyncInput,
   type StartTournamentInput,
 } from "../instructions";
 import {
@@ -240,6 +244,7 @@ export enum BracketChainInstruction {
   RevealSeed,
   SetOracleConfig,
   SetSasConfig,
+  SettleFinal,
   StartTournament,
 }
 
@@ -504,6 +509,17 @@ export function identifyBracketChainInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([178, 70, 107, 219, 7, 103, 82, 187]),
+      ),
+      0,
+    )
+  ) {
+    return BracketChainInstruction.SettleFinal;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([164, 168, 208, 157, 43, 10, 220, 241]),
       ),
       0,
@@ -589,6 +605,9 @@ export type ParsedBracketChainInstruction<
   | ({
       instructionType: BracketChainInstruction.SetSasConfig;
     } & ParsedSetSasConfigInstruction<TProgram>)
+  | ({
+      instructionType: BracketChainInstruction.SettleFinal;
+    } & ParsedSettleFinalInstruction<TProgram>)
   | ({
       instructionType: BracketChainInstruction.StartTournament;
     } & ParsedStartTournamentInstruction<TProgram>);
@@ -759,6 +778,13 @@ export function parseBracketChainInstruction<TProgram extends string>(
         ...parseSetSasConfigInstruction(instruction),
       };
     }
+    case BracketChainInstruction.SettleFinal: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: BracketChainInstruction.SettleFinal,
+        ...parseSettleFinalInstruction(instruction),
+      };
+    }
     case BracketChainInstruction.StartTournament: {
       assertIsInstructionWithAccounts(instruction);
       return {
@@ -884,6 +910,10 @@ export type BracketChainPluginInstructions = {
   setSasConfig: (
     input: SetSasConfigAsyncInput,
   ) => ReturnType<typeof getSetSasConfigInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  settleFinal: (
+    input: SettleFinalAsyncInput,
+  ) => ReturnType<typeof getSettleFinalInstructionAsync> &
     SelfPlanAndSendFunctions;
   startTournament: (
     input: StartTournamentInput,
@@ -1044,6 +1074,11 @@ export function bracketChainProgram() {
             addSelfPlanAndSendFunctions(
               client,
               getSetSasConfigInstructionAsync(input),
+            ),
+          settleFinal: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getSettleFinalInstructionAsync(input),
             ),
           startTournament: (input) =>
             addSelfPlanAndSendFunctions(

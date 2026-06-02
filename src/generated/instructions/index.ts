@@ -29,4 +29,5 @@ export * from "./resolveDispute";
 export * from "./revealSeed";
 export * from "./setOracleConfig";
 export * from "./setSasConfig";
+export * from "./settleFinal";
 export * from "./startTournament";

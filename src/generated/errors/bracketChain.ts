@@ -126,6 +126,14 @@ export const BRACKET_CHAIN_ERROR__NOT_AUTHORIZED = 0x17a5; // 6053
 export const BRACKET_CHAIN_ERROR__BAD_PROPOSAL_SOURCE = 0x17a6; // 6054
 /** InvalidCustomPayout: Custom payout split is invalid (bps must sum to 10000, be gapless, and fund the winner) */
 export const BRACKET_CHAIN_ERROR__INVALID_CUSTOM_PAYOUT = 0x17a7; // 6055
+/** UntrustedMultiPlacementFinal: A multi-placement (non-WinnerTakesAll) final may only be finalized by a trusted signer (settle_final / report_result / resolve_dispute), not a permissionless or counterparty path */
+export const BRACKET_CHAIN_ERROR__UNTRUSTED_MULTI_PLACEMENT_FINAL = 0x17a8; // 6056
+/** BracketSeedMismatch: Bracket descriptor is inconsistent with the VRF-derived seed permutation */
+export const BRACKET_CHAIN_ERROR__BRACKET_SEED_MISMATCH = 0x17a9; // 6057
+/** NonParticipantInBracket: Account supplied for a bracket slot is not a Participant of this tournament */
+export const BRACKET_CHAIN_ERROR__NON_PARTICIPANT_IN_BRACKET = 0x17aa; // 6058
+/** InvalidOracleConfig: Oracle config out of bounds (min_oracle_samples must be >= 1; max_stale_slots must not exceed the staleness ceiling) */
+export const BRACKET_CHAIN_ERROR__INVALID_ORACLE_CONFIG = 0x17ab; // 6059
 
 export type BracketChainError =
   | typeof BRACKET_CHAIN_ERROR__ALREADY_REGISTERED
@@ -134,11 +142,13 @@ export type BracketChainError =
   | typeof BRACKET_CHAIN_ERROR__ATTESTATION_REQUIRED
   | typeof BRACKET_CHAIN_ERROR__ATTESTATION_WALLET_MISMATCH
   | typeof BRACKET_CHAIN_ERROR__BAD_PROPOSAL_SOURCE
+  | typeof BRACKET_CHAIN_ERROR__BRACKET_SEED_MISMATCH
   | typeof BRACKET_CHAIN_ERROR__CLAIM_WINDOW_NOT_ELAPSED
   | typeof BRACKET_CHAIN_ERROR__GAME_NOT_YET_SUPPORTED
   | typeof BRACKET_CHAIN_ERROR__INVALID_ATTESTATION_OWNER
   | typeof BRACKET_CHAIN_ERROR__INVALID_CUSTOM_PAYOUT
   | typeof BRACKET_CHAIN_ERROR__INVALID_MATCH_INDEX
+  | typeof BRACKET_CHAIN_ERROR__INVALID_ORACLE_CONFIG
   | typeof BRACKET_CHAIN_ERROR__INVALID_PAYOUT_PRESET
   | typeof BRACKET_CHAIN_ERROR__INVALID_PROPOSED_WINNER
   | typeof BRACKET_CHAIN_ERROR__INVALID_RANDOMNESS_OWNER
@@ -155,6 +165,7 @@ export type BracketChainError =
   | typeof BRACKET_CHAIN_ERROR__MIGRATION_NOT_NEEDED
   | typeof BRACKET_CHAIN_ERROR__MIN_PARTICIPANTS_NOT_MET
   | typeof BRACKET_CHAIN_ERROR__NAME_TOO_LONG
+  | typeof BRACKET_CHAIN_ERROR__NON_PARTICIPANT_IN_BRACKET
   | typeof BRACKET_CHAIN_ERROR__NON_PARTICIPANT_WINNER
   | typeof BRACKET_CHAIN_ERROR__NO_PROPOSAL
   | typeof BRACKET_CHAIN_ERROR__NOT_ACTIVE
@@ -181,6 +192,7 @@ export type BracketChainError =
   | typeof BRACKET_CHAIN_ERROR__TOURNAMENT_FULL
   | typeof BRACKET_CHAIN_ERROR__TOURNAMENT_IN_PROGRESS
   | typeof BRACKET_CHAIN_ERROR__UNAUTHORIZED_AUTHORITY
+  | typeof BRACKET_CHAIN_ERROR__UNTRUSTED_MULTI_PLACEMENT_FINAL
   | typeof BRACKET_CHAIN_ERROR__WRONG_ATTESTATION_CREDENTIAL
   | typeof BRACKET_CHAIN_ERROR__WRONG_ATTESTATION_SCHEMA
   | typeof BRACKET_CHAIN_ERROR__WRONG_FEED_ACCOUNT;
@@ -194,11 +206,13 @@ if (process.env["NODE_ENV"] !== "production") {
     [BRACKET_CHAIN_ERROR__ATTESTATION_REQUIRED]: `This game requires a SAS identity attestation to join`,
     [BRACKET_CHAIN_ERROR__ATTESTATION_WALLET_MISMATCH]: `Attestation nonce does not bind to the joining wallet`,
     [BRACKET_CHAIN_ERROR__BAD_PROPOSAL_SOURCE]: `Proposal source is not valid for this action`,
+    [BRACKET_CHAIN_ERROR__BRACKET_SEED_MISMATCH]: `Bracket descriptor is inconsistent with the VRF-derived seed permutation`,
     [BRACKET_CHAIN_ERROR__CLAIM_WINDOW_NOT_ELAPSED]: `Claim window has not elapsed yet`,
     [BRACKET_CHAIN_ERROR__GAME_NOT_YET_SUPPORTED]: `Selected game is not yet supported for tournament creation`,
     [BRACKET_CHAIN_ERROR__INVALID_ATTESTATION_OWNER]: `Attestation account is not owned by the SAS program`,
     [BRACKET_CHAIN_ERROR__INVALID_CUSTOM_PAYOUT]: `Custom payout split is invalid (bps must sum to 10000, be gapless, and fund the winner)`,
     [BRACKET_CHAIN_ERROR__INVALID_MATCH_INDEX]: `Match referenced is outside the bracket`,
+    [BRACKET_CHAIN_ERROR__INVALID_ORACLE_CONFIG]: `Oracle config out of bounds (min_oracle_samples must be >= 1; max_stale_slots must not exceed the staleness ceiling)`,
     [BRACKET_CHAIN_ERROR__INVALID_PAYOUT_PRESET]: `Selected payout preset is invalid`,
     [BRACKET_CHAIN_ERROR__INVALID_PROPOSED_WINNER]: `Proposed winner is not a player in this match`,
     [BRACKET_CHAIN_ERROR__INVALID_RANDOMNESS_OWNER]: `Randomness account is not owned by the Switchboard On-Demand program`,
@@ -215,6 +229,7 @@ if (process.env["NODE_ENV"] !== "production") {
     [BRACKET_CHAIN_ERROR__MIGRATION_NOT_NEEDED]: `Tournament account is already at the V1 layout; migration not needed`,
     [BRACKET_CHAIN_ERROR__MIN_PARTICIPANTS_NOT_MET]: `Participant count is below the protocol minimum (2)`,
     [BRACKET_CHAIN_ERROR__NAME_TOO_LONG]: `Tournament name exceeds 32 bytes`,
+    [BRACKET_CHAIN_ERROR__NON_PARTICIPANT_IN_BRACKET]: `Account supplied for a bracket slot is not a Participant of this tournament`,
     [BRACKET_CHAIN_ERROR__NON_PARTICIPANT_WINNER]: `Reported winner is not a participant of the tournament`,
     [BRACKET_CHAIN_ERROR__NO_PROPOSAL]: `Match has no pending proposal`,
     [BRACKET_CHAIN_ERROR__NOT_ACTIVE]: `Tournament is not in the Active state`,
@@ -241,6 +256,7 @@ if (process.env["NODE_ENV"] !== "production") {
     [BRACKET_CHAIN_ERROR__TOURNAMENT_FULL]: `Tournament has reached its maximum participant count`,
     [BRACKET_CHAIN_ERROR__TOURNAMENT_IN_PROGRESS]: `Cannot cancel a tournament that has matches in progress`,
     [BRACKET_CHAIN_ERROR__UNAUTHORIZED_AUTHORITY]: `Caller is not the authorized authority for this action`,
+    [BRACKET_CHAIN_ERROR__UNTRUSTED_MULTI_PLACEMENT_FINAL]: `A multi-placement (non-WinnerTakesAll) final may only be finalized by a trusted signer (settle_final / report_result / resolve_dispute), not a permissionless or counterparty path`,
     [BRACKET_CHAIN_ERROR__WRONG_ATTESTATION_CREDENTIAL]: `Attestation credential does not match the protocol's SAS credential`,
     [BRACKET_CHAIN_ERROR__WRONG_ATTESTATION_SCHEMA]: `Attestation schema does not match the game's SAS schema`,
     [BRACKET_CHAIN_ERROR__WRONG_FEED_ACCOUNT]: `Switchboard feed account is not owned by the On-Demand program, or is on the wrong queue`,
