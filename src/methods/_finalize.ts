@@ -39,10 +39,10 @@ import { findMatchPda } from "../pdas";
  *    requires `placements` + their ATAs in `remaining_accounts`.
  *
  * This helper reads the match + tournament, derives the shared account set
- * (participant PDAs, next-match PDA, organizer ATA), validates `placements`,
- * and builds the idempotent ATA-create instructions + the writable-ATA
- * `remaining_accounts` list. The caller stitches these into its specific
- * generated builder (which carries the per-ix signer + data args).
+ * (participant PDAs, next-match PDA), validates `placements`, and builds the
+ * idempotent ATA-create instructions + the writable-ATA `remaining_accounts`
+ * list. The caller stitches these into its specific generated builder (which
+ * carries the per-ix signer + data args).
  */
 export interface FinalizeContext {
   isFinal: boolean;
@@ -53,8 +53,6 @@ export interface FinalizeContext {
   nextMatch?: Address;
   participantA: Address;
   participantB: Address;
-  /** Organizer's token ATA — present only for the final match. */
-  organizerTokenAccount?: Address;
   /** Idempotent ATA-create instructions to prepend to the tx (final only). */
   ataInstructions: Instruction[];
   /** Writable placement + treasury ATAs to append as remaining accounts. */
@@ -190,11 +188,6 @@ export async function buildFinalizeContext(
     mint: tokenMint,
     tokenProgram: TOKEN_PROGRAM_ADDRESS,
   });
-  const [organizerTokenAccount] = await findAssociatedTokenPda({
-    owner: tournament.organizer,
-    mint: tokenMint,
-    tokenProgram: TOKEN_PROGRAM_ADDRESS,
-  });
 
   const dedupe = new Set<Address>();
   const ataInstructions: Instruction[] = [];
@@ -212,7 +205,6 @@ export async function buildFinalizeContext(
   };
   for (const { wallet, ata } of placementAtas) await ensureAta(wallet, ata);
   await ensureAta(treasury, treasuryAta);
-  await ensureAta(tournament.organizer, organizerTokenAccount);
 
   const remainingAccounts: AccountMeta[] = [
     ...placementAtas.map(({ ata }) => ({
@@ -229,7 +221,6 @@ export async function buildFinalizeContext(
     tournament,
     participantA,
     participantB,
-    organizerTokenAccount,
     ataInstructions,
     remainingAccounts,
   };

@@ -58,7 +58,6 @@ export async function resolveDispute(
     nextMatch: ctx.nextMatch,
     participantA: ctx.participantA,
     participantB: ctx.participantB,
-    organizerTokenAccount: ctx.organizerTokenAccount,
     winner: params.winner,
     placements: params.placements ?? [],
   });

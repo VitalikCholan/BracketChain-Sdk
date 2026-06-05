@@ -64,7 +64,6 @@ export type SettleFinalInstruction<
   TAccountParticipantB extends string | AccountMeta<string> = string,
   TAccountProtocolConfig extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
-  TAccountOrganizerTokenAccount extends string | AccountMeta<string> = string,
   TAccountTokenProgram extends string | AccountMeta<string> =
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
@@ -97,9 +96,6 @@ export type SettleFinalInstruction<
       TAccountVault extends string
         ? WritableAccount<TAccountVault>
         : TAccountVault,
-      TAccountOrganizerTokenAccount extends string
-        ? WritableAccount<TAccountOrganizerTokenAccount>
-        : TAccountOrganizerTokenAccount,
       TAccountTokenProgram extends string
         ? ReadonlyAccount<TAccountTokenProgram>
         : TAccountTokenProgram,
@@ -150,7 +146,6 @@ export type SettleFinalAsyncInput<
   TAccountParticipantB extends string = string,
   TAccountProtocolConfig extends string = string,
   TAccountVault extends string = string,
-  TAccountOrganizerTokenAccount extends string = string,
   TAccountTokenProgram extends string = string,
 > = {
   /**
@@ -170,7 +165,6 @@ export type SettleFinalAsyncInput<
   participantB: Address<TAccountParticipantB>;
   protocolConfig?: Address<TAccountProtocolConfig>;
   vault?: Address<TAccountVault>;
-  organizerTokenAccount?: Address<TAccountOrganizerTokenAccount>;
   tokenProgram?: Address<TAccountTokenProgram>;
   placements: SettleFinalInstructionDataArgs["placements"];
 };
@@ -184,7 +178,6 @@ export async function getSettleFinalInstructionAsync<
   TAccountParticipantB extends string,
   TAccountProtocolConfig extends string,
   TAccountVault extends string,
-  TAccountOrganizerTokenAccount extends string,
   TAccountTokenProgram extends string,
   TProgramAddress extends Address = typeof BRACKET_CHAIN_PROGRAM_ADDRESS,
 >(
@@ -197,7 +190,6 @@ export async function getSettleFinalInstructionAsync<
     TAccountParticipantB,
     TAccountProtocolConfig,
     TAccountVault,
-    TAccountOrganizerTokenAccount,
     TAccountTokenProgram
   >,
   config?: { programAddress?: TProgramAddress },
@@ -212,7 +204,6 @@ export async function getSettleFinalInstructionAsync<
     TAccountParticipantB,
     TAccountProtocolConfig,
     TAccountVault,
-    TAccountOrganizerTokenAccount,
     TAccountTokenProgram
   >
 > {
@@ -230,10 +221,6 @@ export async function getSettleFinalInstructionAsync<
     participantB: { value: input.participantB ?? null, isWritable: true },
     protocolConfig: { value: input.protocolConfig ?? null, isWritable: false },
     vault: { value: input.vault ?? null, isWritable: true },
-    organizerTokenAccount: {
-      value: input.organizerTokenAccount ?? null,
-      isWritable: true,
-    },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
@@ -272,7 +259,6 @@ export async function getSettleFinalInstructionAsync<
       getAccountMeta("participantB", accounts.participantB),
       getAccountMeta("protocolConfig", accounts.protocolConfig),
       getAccountMeta("vault", accounts.vault),
-      getAccountMeta("organizerTokenAccount", accounts.organizerTokenAccount),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
     ],
     data: getSettleFinalInstructionDataEncoder().encode(
@@ -289,7 +275,6 @@ export async function getSettleFinalInstructionAsync<
     TAccountParticipantB,
     TAccountProtocolConfig,
     TAccountVault,
-    TAccountOrganizerTokenAccount,
     TAccountTokenProgram
   >);
 }
@@ -303,7 +288,6 @@ export type SettleFinalInput<
   TAccountParticipantB extends string = string,
   TAccountProtocolConfig extends string = string,
   TAccountVault extends string = string,
-  TAccountOrganizerTokenAccount extends string = string,
   TAccountTokenProgram extends string = string,
 > = {
   /**
@@ -323,7 +307,6 @@ export type SettleFinalInput<
   participantB: Address<TAccountParticipantB>;
   protocolConfig: Address<TAccountProtocolConfig>;
   vault: Address<TAccountVault>;
-  organizerTokenAccount?: Address<TAccountOrganizerTokenAccount>;
   tokenProgram?: Address<TAccountTokenProgram>;
   placements: SettleFinalInstructionDataArgs["placements"];
 };
@@ -337,7 +320,6 @@ export function getSettleFinalInstruction<
   TAccountParticipantB extends string,
   TAccountProtocolConfig extends string,
   TAccountVault extends string,
-  TAccountOrganizerTokenAccount extends string,
   TAccountTokenProgram extends string,
   TProgramAddress extends Address = typeof BRACKET_CHAIN_PROGRAM_ADDRESS,
 >(
@@ -350,7 +332,6 @@ export function getSettleFinalInstruction<
     TAccountParticipantB,
     TAccountProtocolConfig,
     TAccountVault,
-    TAccountOrganizerTokenAccount,
     TAccountTokenProgram
   >,
   config?: { programAddress?: TProgramAddress },
@@ -364,7 +345,6 @@ export function getSettleFinalInstruction<
   TAccountParticipantB,
   TAccountProtocolConfig,
   TAccountVault,
-  TAccountOrganizerTokenAccount,
   TAccountTokenProgram
 > {
   // Program address.
@@ -381,10 +361,6 @@ export function getSettleFinalInstruction<
     participantB: { value: input.participantB ?? null, isWritable: true },
     protocolConfig: { value: input.protocolConfig ?? null, isWritable: false },
     vault: { value: input.vault ?? null, isWritable: true },
-    organizerTokenAccount: {
-      value: input.organizerTokenAccount ?? null,
-      isWritable: true,
-    },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
@@ -412,7 +388,6 @@ export function getSettleFinalInstruction<
       getAccountMeta("participantB", accounts.participantB),
       getAccountMeta("protocolConfig", accounts.protocolConfig),
       getAccountMeta("vault", accounts.vault),
-      getAccountMeta("organizerTokenAccount", accounts.organizerTokenAccount),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
     ],
     data: getSettleFinalInstructionDataEncoder().encode(
@@ -429,7 +404,6 @@ export function getSettleFinalInstruction<
     TAccountParticipantB,
     TAccountProtocolConfig,
     TAccountVault,
-    TAccountOrganizerTokenAccount,
     TAccountTokenProgram
   >);
 }
@@ -457,8 +431,7 @@ export type ParsedSettleFinalInstruction<
     participantB: TAccountMetas[5];
     protocolConfig: TAccountMetas[6];
     vault: TAccountMetas[7];
-    organizerTokenAccount?: TAccountMetas[8] | undefined;
-    tokenProgram: TAccountMetas[9];
+    tokenProgram: TAccountMetas[8];
   };
   data: SettleFinalInstructionData;
 };
@@ -471,12 +444,12 @@ export function parseSettleFinalInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedSettleFinalInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 10) {
+  if (instruction.accounts.length < 9) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 10,
+        expectedAccountMetas: 9,
       },
     );
   }
@@ -503,7 +476,6 @@ export function parseSettleFinalInstruction<
       participantB: getNextAccount(),
       protocolConfig: getNextAccount(),
       vault: getNextAccount(),
-      organizerTokenAccount: getNextOptionalAccount(),
       tokenProgram: getNextAccount(),
     },
     data: getSettleFinalInstructionDataDecoder().decode(instruction.data),

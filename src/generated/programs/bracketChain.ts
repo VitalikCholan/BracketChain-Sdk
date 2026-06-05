@@ -157,7 +157,7 @@ import {
 } from "../pdas";
 
 export const BRACKET_CHAIN_PROGRAM_ADDRESS =
-  "3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ" as Address<"3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ">;
+  "EF19YVUerm5QW1CsZeqiPDAFFtaXgdt6WuYBGeiz9Q1z" as Address<"EF19YVUerm5QW1CsZeqiPDAFFtaXgdt6WuYBGeiz9Q1z">;
 
 export enum BracketChainAccount {
   MatchNode,
@@ -534,7 +534,7 @@ export function identifyBracketChainInstruction(
 }
 
 export type ParsedBracketChainInstruction<
-  TProgram extends string = "3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ",
+  TProgram extends string = "EF19YVUerm5QW1CsZeqiPDAFFtaXgdt6WuYBGeiz9Q1z",
 > =
   | ({
       instructionType: BracketChainInstruction.BindMatchFeed;

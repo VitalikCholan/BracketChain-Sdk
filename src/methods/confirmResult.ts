@@ -56,7 +56,6 @@ export async function confirmResult(
     nextMatch: ctx.nextMatch,
     participantA: ctx.participantA,
     participantB: ctx.participantB,
-    organizerTokenAccount: ctx.organizerTokenAccount,
     placements: params.placements ?? [],
   });
   const ix: Instruction = {
