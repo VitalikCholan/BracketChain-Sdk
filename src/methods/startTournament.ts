@@ -11,6 +11,7 @@ import {
   BracketChainSDKError,
   MinParticipantsNotMetError,
   RegistrationClosedError,
+  SeedNotRevealedError,
   UnauthorizedReporterError,
   mapError,
 } from "../errors";
@@ -109,6 +110,13 @@ export async function startTournament(
 
   // ── build full descriptor list ────────────────────────────────────────────
   const vrfMode = tournament.settlementMode !== SettlementMode.OrganizerOnly;
+  // VRF-gated brackets (H-2c): building descriptors from an unrevealed
+  // (all-zero) seedHash would derive a garbage permutation and fail on-chain
+  // with a raw SeedNotRevealed on the first chunk — fail fast with the typed
+  // error before doing any work instead.
+  if (vrfMode && !tournament.seedRevealed) {
+    throw new SeedNotRevealedError();
+  }
   const { descriptors, matchPdas, participantsPerDescriptor, bracketSize } =
     await buildBracketDescriptors(tournamentPda, participantWallets, {
       vrfMode,

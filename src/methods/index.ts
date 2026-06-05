@@ -93,6 +93,12 @@ export type {
   ForceClaimDisputedResult,
 } from "./forceClaimDisputed";
 
+export { settleFinal } from "./settleFinal";
+export type {
+  SettleFinalParams,
+  SettleFinalResult,
+} from "./settleFinal";
+
 // ── Oracle settlement (Stage C / V1.2) ──────────────────────────────────────
 export { commitMatchLobby } from "./commitMatchLobby";
 export type {

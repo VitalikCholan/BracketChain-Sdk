@@ -82,6 +82,7 @@ export {
   resolveDispute,
   revealSeed,
   setOracleConfig,
+  settleFinal,
   startTournament,
   subscribe,
 } from "./methods";
@@ -124,6 +125,8 @@ export type {
   RevealSeedResult,
   SetOracleConfigParams,
   SetOracleConfigResult,
+  SettleFinalParams,
+  SettleFinalResult,
   StartTournamentParams,
   StartTournamentResult,
   SubscribeOptions,
