@@ -225,6 +225,93 @@ export class TournamentInProgressError extends BracketChainSDKError {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// V1.1 — game identity (SAS) + settlement-mode errors
+// ─────────────────────────────────────────────────────────────────────────────
+
+export class GameNotSupportedError extends BracketChainSDKError {
+  constructor(cause?: unknown) {
+    super(
+      "Selected game is not yet supported for tournament creation (Phase 1: Manual + Dota2 only).",
+      "GameNotSupported",
+      cause,
+    );
+  }
+}
+
+export class AttestationRequiredError extends BracketChainSDKError {
+  constructor(cause?: unknown) {
+    super(
+      "This game requires a SAS identity attestation to join — pass `gameIdentityAttestation`.",
+      "AttestationRequired",
+      cause,
+    );
+  }
+}
+
+/**
+ * Covers every SAS attestation validation failure on join (wrong owner /
+ * credential / schema, wallet-nonce mismatch, expired, malformed). The exact
+ * on-chain code is preserved in `cause`.
+ */
+export class InvalidAttestationError extends BracketChainSDKError {
+  constructor(cause?: unknown) {
+    super(
+      "SAS identity attestation is invalid for this tournament (owner, credential, schema, wallet binding, expiry, or data).",
+      "InvalidAttestation",
+      cause,
+    );
+  }
+}
+
+export class SettlementModeError extends BracketChainSDKError {
+  constructor(cause?: unknown) {
+    super(
+      "This action is not allowed for the tournament's settlement mode.",
+      "SettlementModeMismatch",
+      cause,
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// V1 player-reported / VRF settlement errors
+// ─────────────────────────────────────────────────────────────────────────────
+
+export class ClaimWindowNotElapsedError extends BracketChainSDKError {
+  constructor(cause?: unknown) {
+    super(
+      "The dispute/claim window has not elapsed yet — a permissionless claim is not allowed.",
+      "ClaimWindowNotElapsed",
+      cause,
+    );
+  }
+}
+
+export class SeedNotRevealedError extends BracketChainSDKError {
+  constructor(cause?: unknown) {
+    super(
+      "Tournament seed has not been revealed yet — start is gated on VRF (call requestSeed / revealSeed first).",
+      "SeedNotRevealed",
+      cause,
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// R15 formats schema-prep
+// ─────────────────────────────────────────────────────────────────────────────
+
+export class FormatNotYetSupportedError extends BracketChainSDKError {
+  constructor(cause?: unknown) {
+    super(
+      "Tournament format is reserved but not yet supported — V1 is single-elimination only (DoubleElim / Swiss / RoundRobin ship in formats Phases A-C).",
+      "FormatNotYetSupported",
+      cause,
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Generic / fallback
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -250,7 +337,9 @@ export class UnknownProgramError extends BracketChainSDKError {
 // Anchor numbers `#[error_code]` enums sequentially from 6000. The order in
 // `bracket-chain-programs/src/errors.rs` determines the code.
 //
-// If you add a new error code on-chain, add a row here. Order MATTERS.
+// If you add a new error code on-chain, add a row here. Order MATTERS — it is
+// the Anchor ordinal contract (code = 6000 + index). Append only; never reorder.
+// Mirrors `bracket-chain-programs/src/errors.rs` (and `target/idl` errors[]).
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ANCHOR_ERROR_OFFSET = 6000;
@@ -280,38 +369,174 @@ const ERRORS_RS_ORDER = [
   "RemainingAccountsMismatch", // 6021
   "ArithmeticOverflow", // 6022
   "SlotHashesUnavailable", // 6023
+  // ── V1.1 game identity (SAS) ──────────────────────────────────────────────
+  "GameNotYetSupported", // 6024
+  "AttestationRequired", // 6025
+  "InvalidAttestationOwner", // 6026
+  "WrongAttestationCredential", // 6027
+  "WrongAttestationSchema", // 6028
+  "AttestationWalletMismatch", // 6029
+  "AttestationExpired", // 6030
+  "MalformedAttestation", // 6031
+  // ── Player-reported / Oracle settlement (Stage B) ─────────────────────────
+  "SettlementModeMismatch", // 6032
+  "NotPlayerInMatch", // 6033
+  "NotCounterparty", // 6034
+  "NoProposal", // 6035
+  "ProposalAlreadyExists", // 6036
+  "InvalidProposedWinner", // 6037
+  "ClaimWindowNotElapsed", // 6038
+  "ProposalDisputed", // 6039
+  "ProposalNotDisputed", // 6040
+  // ── VRF seeding (Stage B) ─────────────────────────────────────────────────
+  "SeedNotRevealed", // 6041
+  "RandomnessNotResolved", // 6042
+  "RandomnessAccountMismatch", // 6043
+  "InvalidRandomnessOwner", // 6044
+  "MalformedRandomness", // 6045
+  "SeedAlreadyRevealed", // 6046
+  "InvalidTournamentAccount", // 6047
+  "MigrationNotNeeded", // 6048
+  // ── V1.2 Oracle settlement (Stage C) ──────────────────────────────────────
+  "MatchAlreadyCommitted", // 6049
+  "MatchNotCommitted", // 6050
+  "WrongFeedAccount", // 6051
+  "OracleWinnerNotInMatch", // 6052
+  "NotAuthorized", // 6053
+  "BadProposalSource", // 6054
+  // ── Stage D + H-1 / H-2 / L-2 hardening (appended) ────────────────────────
+  "InvalidCustomPayout", // 6055
+  "UntrustedMultiPlacementFinal", // 6056
+  "BracketSeedMismatch", // 6057
+  "NonParticipantInBracket", // 6058
+  "InvalidOracleConfig", // 6059
+  // ── Phase 1 closeout hardening (appended) ─────────────────────────────────
+  "ParticipantRefundPending", // 6060
+  "AbandonGraceNotElapsed", // 6061
+  "NonCanonicalBump", // 6062
+  "PlacementNotParticipant", // 6063
+  "DuplicatePlacement", // 6064
+  // ── R15 formats schema-prep (appended) ────────────────────────────────────
+  "FormatNotYetSupported", // 6065
 ] as const;
 
 type OnChainErrorName = (typeof ERRORS_RS_ORDER)[number];
 
+/**
+ * On-chain error name → factory producing the typed SDK error. Factories (not
+ * raw constructors) so codes without a dedicated class can carry the program's
+ * `#[msg]` text via `TransactionFailedError(message, cause)` while still
+ * preserving `cause`. Every entry has signature `(cause?) => BracketChainSDKError`.
+ */
 const ON_CHAIN_TO_SDK: Record<
   OnChainErrorName,
-  new (cause?: unknown) => BracketChainSDKError
+  (cause?: unknown) => BracketChainSDKError
 > = {
-  UnauthorizedAuthority: UnauthorizedReporterError,
-  TournamentFull: TournamentFullError,
-  AlreadyRegistered: AlreadyRegisteredError,
-  RegistrationClosed: RegistrationClosedError,
-  NotInRegistration: RegistrationClosedError,
-  NotActive: TournamentNotActiveError,
-  NotCompleted: TransactionFailedError as never,
-  InvalidPayoutPreset: InvalidPayoutPresetError,
-  PresetExceedsParticipants: InvalidPayoutPresetError,
-  MatchAlreadyReported: MatchAlreadyReportedError,
-  NonParticipantWinner: NonParticipantWinnerError,
-  TournamentInProgress: TournamentInProgressError,
-  RefundAlreadyIssued: TransactionFailedError as never,
-  MaxParticipantsExceeded: MaxParticipantsExceededError,
-  MinParticipantsNotMet: MinParticipantsNotMetError,
-  NameTooLong: NameTooLongError,
-  InvalidTokenMint: InvalidTokenMintError,
-  InvalidVault: TransactionFailedError as never,
-  InvalidTreasury: TransactionFailedError as never,
-  InvalidMatchIndex: InvalidMatchError,
-  ParentMatchesNotComplete: InvalidMatchError,
-  RemainingAccountsMismatch: TransactionFailedError as never,
-  ArithmeticOverflow: TransactionFailedError as never,
-  SlotHashesUnavailable: TransactionFailedError as never,
+  UnauthorizedAuthority: (c) => new UnauthorizedReporterError(c),
+  TournamentFull: (c) => new TournamentFullError(c),
+  AlreadyRegistered: (c) => new AlreadyRegisteredError(c),
+  RegistrationClosed: (c) => new RegistrationClosedError(c),
+  NotInRegistration: (c) => new RegistrationClosedError(c),
+  NotActive: (c) => new TournamentNotActiveError(c),
+  NotCompleted: (c) =>
+    new TransactionFailedError("Tournament is not in the Completed state", c),
+  InvalidPayoutPreset: (c) => new InvalidPayoutPresetError(c),
+  PresetExceedsParticipants: (c) => new InvalidPayoutPresetError(c),
+  MatchAlreadyReported: (c) => new MatchAlreadyReportedError(c),
+  NonParticipantWinner: (c) => new NonParticipantWinnerError(c),
+  TournamentInProgress: (c) => new TournamentInProgressError(c),
+  RefundAlreadyIssued: (c) =>
+    new TransactionFailedError("Refund has already been issued to this participant", c),
+  MaxParticipantsExceeded: (c) => new MaxParticipantsExceededError(c),
+  MinParticipantsNotMet: (c) => new MinParticipantsNotMetError(c),
+  NameTooLong: (c) => new NameTooLongError(c),
+  InvalidTokenMint: (c) => new InvalidTokenMintError(c),
+  InvalidVault: (c) =>
+    new TransactionFailedError("Provided vault token account does not match the tournament vault", c),
+  InvalidTreasury: (c) =>
+    new TransactionFailedError("Provided treasury token account does not match the protocol treasury", c),
+  InvalidMatchIndex: (c) => new InvalidMatchError(c),
+  ParentMatchesNotComplete: (c) => new InvalidMatchError(c),
+  RemainingAccountsMismatch: (c) =>
+    new TransactionFailedError("remaining_accounts does not match the expected count for this instruction", c),
+  ArithmeticOverflow: (c) => new TransactionFailedError("Arithmetic overflow", c),
+  SlotHashesUnavailable: (c) =>
+    new TransactionFailedError("slot_hashes sysvar is empty; cannot derive seed", c),
+  // ── V1.1 game identity (SAS) ──────────────────────────────────────────────
+  GameNotYetSupported: (c) => new GameNotSupportedError(c),
+  AttestationRequired: (c) => new AttestationRequiredError(c),
+  InvalidAttestationOwner: (c) => new InvalidAttestationError(c),
+  WrongAttestationCredential: (c) => new InvalidAttestationError(c),
+  WrongAttestationSchema: (c) => new InvalidAttestationError(c),
+  AttestationWalletMismatch: (c) => new InvalidAttestationError(c),
+  AttestationExpired: (c) => new InvalidAttestationError(c),
+  MalformedAttestation: (c) => new InvalidAttestationError(c),
+  // ── Player-reported / Oracle settlement (Stage B) ─────────────────────────
+  SettlementModeMismatch: (c) => new SettlementModeError(c),
+  NotPlayerInMatch: (c) =>
+    new TransactionFailedError("Signer is not a player in this match", c),
+  NotCounterparty: (c) =>
+    new TransactionFailedError("Only the counterparty may confirm or dispute this proposal", c),
+  NoProposal: (c) => new TransactionFailedError("Match has no pending proposal", c),
+  ProposalAlreadyExists: (c) =>
+    new TransactionFailedError("Match already has a pending proposal", c),
+  InvalidProposedWinner: (c) => new NonParticipantWinnerError(c),
+  ClaimWindowNotElapsed: (c) => new ClaimWindowNotElapsedError(c),
+  ProposalDisputed: (c) =>
+    new TransactionFailedError("Proposal is disputed; it cannot be claimed", c),
+  ProposalNotDisputed: (c) =>
+    new TransactionFailedError("Proposal is not disputed", c),
+  // ── VRF seeding (Stage B) ─────────────────────────────────────────────────
+  SeedNotRevealed: (c) => new SeedNotRevealedError(c),
+  RandomnessNotResolved: (c) =>
+    new TransactionFailedError("Switchboard randomness is not yet resolved for this slot", c),
+  RandomnessAccountMismatch: (c) =>
+    new TransactionFailedError("Provided randomness account does not match the tournament commitment", c),
+  InvalidRandomnessOwner: (c) =>
+    new TransactionFailedError("Randomness account is not owned by the Switchboard On-Demand program", c),
+  MalformedRandomness: (c) =>
+    new TransactionFailedError("Randomness account data is malformed", c),
+  SeedAlreadyRevealed: (c) =>
+    new TransactionFailedError("Tournament seed has already been revealed", c),
+  InvalidTournamentAccount: (c) =>
+    new TransactionFailedError("Account is not a Tournament owned by this program", c),
+  MigrationNotNeeded: (c) =>
+    new TransactionFailedError("Tournament account is already at the V1 layout; migration not needed", c),
+  // ── V1.2 Oracle settlement (Stage C) ──────────────────────────────────────
+  MatchAlreadyCommitted: (c) =>
+    new TransactionFailedError("Match already has a lobby commitment", c),
+  MatchNotCommitted: (c) =>
+    new TransactionFailedError("Match has no lobby commitment; commit before binding a feed", c),
+  WrongFeedAccount: (c) =>
+    new TransactionFailedError("Switchboard feed account is not owned by the On-Demand program, or is on the wrong queue", c),
+  OracleWinnerNotInMatch: (c) =>
+    new TransactionFailedError("Oracle feed value did not match either committed player identity", c),
+  NotAuthorized: (c) =>
+    new TransactionFailedError("Signer is not authorized to dispute this Oracle proposal", c),
+  BadProposalSource: (c) =>
+    new TransactionFailedError("Proposal source is not valid for this action", c),
+  // ── Stage D + H-1 / H-2 / L-2 hardening ───────────────────────────────────
+  InvalidCustomPayout: (c) => new InvalidPayoutPresetError(c),
+  UntrustedMultiPlacementFinal: (c) =>
+    new TransactionFailedError("A multi-placement final may only be finalized by a trusted signer (settle_final / report_result / resolve_dispute)", c),
+  BracketSeedMismatch: (c) =>
+    new TransactionFailedError("Bracket descriptor is inconsistent with the VRF-derived seed permutation", c),
+  NonParticipantInBracket: (c) => new NonParticipantWinnerError(c),
+  InvalidOracleConfig: (c) =>
+    new TransactionFailedError("Oracle config out of bounds (min_oracle_samples >= 1; max_stale_slots within ceiling)", c),
+  // ── Phase 1 closeout hardening ────────────────────────────────────────────
+  ParticipantRefundPending: (c) =>
+    new TransactionFailedError("Participant has an unpaid refund; drive the refund chunk before closing this account", c),
+  AbandonGraceNotElapsed: (c) =>
+    new TransactionFailedError("Abandoned-tournament grace has not elapsed; only the organizer may cancel before registration_deadline + grace", c),
+  NonCanonicalBump: (c) =>
+    new TransactionFailedError("Match descriptor bump is not the canonical PDA bump", c),
+  PlacementNotParticipant: (c) =>
+    new TransactionFailedError("Placement wallet is not a registered Participant of this tournament", c),
+  DuplicatePlacement: (c) =>
+    new TransactionFailedError("Placements must be pairwise distinct", c),
+  // ── R15 formats schema-prep ───────────────────────────────────────────────
+  FormatNotYetSupported: (c) => new FormatNotYetSupportedError(c),
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -359,8 +584,8 @@ export function mapError(err: unknown): BracketChainSDKError {
         const idx = codeNumber - ANCHOR_ERROR_OFFSET;
         const name = ERRORS_RS_ORDER[idx];
         if (name) {
-          const Ctor = ON_CHAIN_TO_SDK[name];
-          if (Ctor) return new Ctor(err);
+          const make = ON_CHAIN_TO_SDK[name];
+          if (make) return make(err);
         }
       }
       return new TransactionFailedError(

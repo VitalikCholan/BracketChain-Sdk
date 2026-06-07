@@ -25,6 +25,8 @@ import {
   getStructEncoder,
   getU16Decoder,
   getU16Encoder,
+  getU32Decoder,
+  getU32Encoder,
   getU8Decoder,
   getU8Encoder,
   transformEncoder,
@@ -56,6 +58,25 @@ export type Participant = {
   seedIndex: number;
   refundPaid: boolean;
   bump: number;
+  /**
+   * The SAS attestation's 32-byte `identity_bytes`, stored verbatim (the
+   * issuer fingerprint = SHA-256(steam_id_64 LE); no on-chain hashing).
+   * Zero-bytes for `Manual`-game tournaments (no attestation required).
+   */
+  identityHash: ReadonlyUint8Array;
+  /**
+   * The SAS Attestation account that bound this wallet ↔ game identity.
+   * `Pubkey::default()` for Manual tournaments.
+   */
+  identityAttestation: Address;
+  /**
+   * Foundation stats consumed by partial-cancel (make-whole survivors),
+   * formats standings, and the webapp profile. Set by result-reporting ix.
+   */
+  wins: number;
+  losses: number;
+  pointsFor: number;
+  pointsAgainst: number;
 };
 
 export type ParticipantArgs = {
@@ -64,6 +85,25 @@ export type ParticipantArgs = {
   seedIndex: number;
   refundPaid: boolean;
   bump: number;
+  /**
+   * The SAS attestation's 32-byte `identity_bytes`, stored verbatim (the
+   * issuer fingerprint = SHA-256(steam_id_64 LE); no on-chain hashing).
+   * Zero-bytes for `Manual`-game tournaments (no attestation required).
+   */
+  identityHash: ReadonlyUint8Array;
+  /**
+   * The SAS Attestation account that bound this wallet ↔ game identity.
+   * `Pubkey::default()` for Manual tournaments.
+   */
+  identityAttestation: Address;
+  /**
+   * Foundation stats consumed by partial-cancel (make-whole survivors),
+   * formats standings, and the webapp profile. Set by result-reporting ix.
+   */
+  wins: number;
+  losses: number;
+  pointsFor: number;
+  pointsAgainst: number;
 };
 
 /** Gets the encoder for {@link ParticipantArgs} account data. */
@@ -76,6 +116,12 @@ export function getParticipantEncoder(): FixedSizeEncoder<ParticipantArgs> {
       ["seedIndex", getU16Encoder()],
       ["refundPaid", getBooleanEncoder()],
       ["bump", getU8Encoder()],
+      ["identityHash", fixEncoderSize(getBytesEncoder(), 32)],
+      ["identityAttestation", getAddressEncoder()],
+      ["wins", getU8Encoder()],
+      ["losses", getU8Encoder()],
+      ["pointsFor", getU32Encoder()],
+      ["pointsAgainst", getU32Encoder()],
     ]),
     (value) => ({ ...value, discriminator: PARTICIPANT_DISCRIMINATOR }),
   );
@@ -90,6 +136,12 @@ export function getParticipantDecoder(): FixedSizeDecoder<Participant> {
     ["seedIndex", getU16Decoder()],
     ["refundPaid", getBooleanDecoder()],
     ["bump", getU8Decoder()],
+    ["identityHash", fixDecoderSize(getBytesDecoder(), 32)],
+    ["identityAttestation", getAddressDecoder()],
+    ["wins", getU8Decoder()],
+    ["losses", getU8Decoder()],
+    ["pointsFor", getU32Decoder()],
+    ["pointsAgainst", getU32Decoder()],
   ]);
 }
 
@@ -155,5 +207,5 @@ export async function fetchAllMaybeParticipant(
 }
 
 export function getParticipantSize(): number {
-  return 76;
+  return 150;
 }

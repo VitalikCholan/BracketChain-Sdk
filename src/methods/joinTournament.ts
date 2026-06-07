@@ -27,6 +27,13 @@ import { assertSigner, sendInstructions } from "./_send";
 export interface JoinTournamentParams {
   /** PDA address of the tournament to join. */
   tournamentPda: Address;
+  /**
+   * SAS game-identity attestation account for the connected wallet. Required
+   * for non-`Manual` games (the program validates owner / nonce / credential /
+   * schema / expiry and copies `identity_hash` onto the Participant). Omit for
+   * `Manual` tournaments — the on-chain account stays `None`.
+   */
+  gameIdentityAttestation?: Address;
 }
 
 export interface JoinTournamentResult {
@@ -116,6 +123,7 @@ export async function joinTournament(
     participant: participantPda,
     playerTokenAccount: playerAta,
     vault: vaultPda,
+    gameIdentityAttestation: params.gameIdentityAttestation,
   });
 
   try {

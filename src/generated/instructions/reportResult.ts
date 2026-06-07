@@ -62,7 +62,6 @@ export type ReportResultInstruction<
   TAccountNextMatch extends string | AccountMeta<string> = string,
   TAccountProtocolConfig extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
-  TAccountOrganizerTokenAccount extends string | AccountMeta<string> = string,
   TAccountTokenProgram extends string | AccountMeta<string> =
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
@@ -89,9 +88,6 @@ export type ReportResultInstruction<
       TAccountVault extends string
         ? WritableAccount<TAccountVault>
         : TAccountVault,
-      TAccountOrganizerTokenAccount extends string
-        ? WritableAccount<TAccountOrganizerTokenAccount>
-        : TAccountOrganizerTokenAccount,
       TAccountTokenProgram extends string
         ? ReadonlyAccount<TAccountTokenProgram>
         : TAccountTokenProgram,
@@ -146,7 +142,6 @@ export type ReportResultAsyncInput<
   TAccountNextMatch extends string = string,
   TAccountProtocolConfig extends string = string,
   TAccountVault extends string = string,
-  TAccountOrganizerTokenAccount extends string = string,
   TAccountTokenProgram extends string = string,
 > = {
   organizer: TransactionSigner<TAccountOrganizer>;
@@ -156,14 +151,6 @@ export type ReportResultAsyncInput<
   nextMatch?: Address<TAccountNextMatch>;
   protocolConfig?: Address<TAccountProtocolConfig>;
   vault?: Address<TAccountVault>;
-  /**
-   * Organizer's ATA in the tournament's token mint. Required on final-match
-   * when `tournament.organizer_deposit > 0` and the deposit has not been
-   * refunded yet (Variant A — deposit is excluded from the prize-pool
-   * basis). Pass `None` for non-final reports or when the deposit is `0`.
-   * Mint + owner are validated by Anchor (constraints auto-skip when None).
-   */
-  organizerTokenAccount?: Address<TAccountOrganizerTokenAccount>;
   tokenProgram?: Address<TAccountTokenProgram>;
   winner: ReportResultInstructionDataArgs["winner"];
   placements: ReportResultInstructionDataArgs["placements"];
@@ -176,7 +163,6 @@ export async function getReportResultInstructionAsync<
   TAccountNextMatch extends string,
   TAccountProtocolConfig extends string,
   TAccountVault extends string,
-  TAccountOrganizerTokenAccount extends string,
   TAccountTokenProgram extends string,
   TProgramAddress extends Address = typeof BRACKET_CHAIN_PROGRAM_ADDRESS,
 >(
@@ -187,7 +173,6 @@ export async function getReportResultInstructionAsync<
     TAccountNextMatch,
     TAccountProtocolConfig,
     TAccountVault,
-    TAccountOrganizerTokenAccount,
     TAccountTokenProgram
   >,
   config?: { programAddress?: TProgramAddress },
@@ -200,7 +185,6 @@ export async function getReportResultInstructionAsync<
     TAccountNextMatch,
     TAccountProtocolConfig,
     TAccountVault,
-    TAccountOrganizerTokenAccount,
     TAccountTokenProgram
   >
 > {
@@ -216,10 +200,6 @@ export async function getReportResultInstructionAsync<
     nextMatch: { value: input.nextMatch ?? null, isWritable: true },
     protocolConfig: { value: input.protocolConfig ?? null, isWritable: false },
     vault: { value: input.vault ?? null, isWritable: true },
-    organizerTokenAccount: {
-      value: input.organizerTokenAccount ?? null,
-      isWritable: true,
-    },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
@@ -256,7 +236,6 @@ export async function getReportResultInstructionAsync<
       getAccountMeta("nextMatch", accounts.nextMatch),
       getAccountMeta("protocolConfig", accounts.protocolConfig),
       getAccountMeta("vault", accounts.vault),
-      getAccountMeta("organizerTokenAccount", accounts.organizerTokenAccount),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
     ],
     data: getReportResultInstructionDataEncoder().encode(
@@ -271,7 +250,6 @@ export async function getReportResultInstructionAsync<
     TAccountNextMatch,
     TAccountProtocolConfig,
     TAccountVault,
-    TAccountOrganizerTokenAccount,
     TAccountTokenProgram
   >);
 }
@@ -283,7 +261,6 @@ export type ReportResultInput<
   TAccountNextMatch extends string = string,
   TAccountProtocolConfig extends string = string,
   TAccountVault extends string = string,
-  TAccountOrganizerTokenAccount extends string = string,
   TAccountTokenProgram extends string = string,
 > = {
   organizer: TransactionSigner<TAccountOrganizer>;
@@ -293,14 +270,6 @@ export type ReportResultInput<
   nextMatch?: Address<TAccountNextMatch>;
   protocolConfig: Address<TAccountProtocolConfig>;
   vault: Address<TAccountVault>;
-  /**
-   * Organizer's ATA in the tournament's token mint. Required on final-match
-   * when `tournament.organizer_deposit > 0` and the deposit has not been
-   * refunded yet (Variant A — deposit is excluded from the prize-pool
-   * basis). Pass `None` for non-final reports or when the deposit is `0`.
-   * Mint + owner are validated by Anchor (constraints auto-skip when None).
-   */
-  organizerTokenAccount?: Address<TAccountOrganizerTokenAccount>;
   tokenProgram?: Address<TAccountTokenProgram>;
   winner: ReportResultInstructionDataArgs["winner"];
   placements: ReportResultInstructionDataArgs["placements"];
@@ -313,7 +282,6 @@ export function getReportResultInstruction<
   TAccountNextMatch extends string,
   TAccountProtocolConfig extends string,
   TAccountVault extends string,
-  TAccountOrganizerTokenAccount extends string,
   TAccountTokenProgram extends string,
   TProgramAddress extends Address = typeof BRACKET_CHAIN_PROGRAM_ADDRESS,
 >(
@@ -324,7 +292,6 @@ export function getReportResultInstruction<
     TAccountNextMatch,
     TAccountProtocolConfig,
     TAccountVault,
-    TAccountOrganizerTokenAccount,
     TAccountTokenProgram
   >,
   config?: { programAddress?: TProgramAddress },
@@ -336,7 +303,6 @@ export function getReportResultInstruction<
   TAccountNextMatch,
   TAccountProtocolConfig,
   TAccountVault,
-  TAccountOrganizerTokenAccount,
   TAccountTokenProgram
 > {
   // Program address.
@@ -351,10 +317,6 @@ export function getReportResultInstruction<
     nextMatch: { value: input.nextMatch ?? null, isWritable: true },
     protocolConfig: { value: input.protocolConfig ?? null, isWritable: false },
     vault: { value: input.vault ?? null, isWritable: true },
-    organizerTokenAccount: {
-      value: input.organizerTokenAccount ?? null,
-      isWritable: true,
-    },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
   };
   const accounts = originalAccounts as Record<
@@ -380,7 +342,6 @@ export function getReportResultInstruction<
       getAccountMeta("nextMatch", accounts.nextMatch),
       getAccountMeta("protocolConfig", accounts.protocolConfig),
       getAccountMeta("vault", accounts.vault),
-      getAccountMeta("organizerTokenAccount", accounts.organizerTokenAccount),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
     ],
     data: getReportResultInstructionDataEncoder().encode(
@@ -395,7 +356,6 @@ export function getReportResultInstruction<
     TAccountNextMatch,
     TAccountProtocolConfig,
     TAccountVault,
-    TAccountOrganizerTokenAccount,
     TAccountTokenProgram
   >);
 }
@@ -413,15 +373,7 @@ export type ParsedReportResultInstruction<
     nextMatch?: TAccountMetas[3] | undefined;
     protocolConfig: TAccountMetas[4];
     vault: TAccountMetas[5];
-    /**
-     * Organizer's ATA in the tournament's token mint. Required on final-match
-     * when `tournament.organizer_deposit > 0` and the deposit has not been
-     * refunded yet (Variant A — deposit is excluded from the prize-pool
-     * basis). Pass `None` for non-final reports or when the deposit is `0`.
-     * Mint + owner are validated by Anchor (constraints auto-skip when None).
-     */
-    organizerTokenAccount?: TAccountMetas[6] | undefined;
-    tokenProgram: TAccountMetas[7];
+    tokenProgram: TAccountMetas[6];
   };
   data: ReportResultInstructionData;
 };
@@ -434,12 +386,12 @@ export function parseReportResultInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedReportResultInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 8) {
+  if (instruction.accounts.length < 7) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 8,
+        expectedAccountMetas: 7,
       },
     );
   }
@@ -464,7 +416,6 @@ export function parseReportResultInstruction<
       nextMatch: getNextOptionalAccount(),
       protocolConfig: getNextAccount(),
       vault: getNextAccount(),
-      organizerTokenAccount: getNextOptionalAccount(),
       tokenProgram: getNextAccount(),
     },
     data: getReportResultInstructionDataDecoder().decode(instruction.data),

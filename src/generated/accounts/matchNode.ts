@@ -21,6 +21,10 @@ import {
   getBooleanEncoder,
   getBytesDecoder,
   getBytesEncoder,
+  getI64Decoder,
+  getI64Encoder,
+  getOptionDecoder,
+  getOptionEncoder,
   getStructDecoder,
   getStructEncoder,
   getU16Decoder,
@@ -30,21 +34,31 @@ import {
   transformEncoder,
   type Account,
   type Address,
+  type Codec,
+  type Decoder,
   type EncodedAccount,
+  type Encoder,
   type FetchAccountConfig,
   type FetchAccountsConfig,
-  type FixedSizeCodec,
-  type FixedSizeDecoder,
-  type FixedSizeEncoder,
   type MaybeAccount,
   type MaybeEncodedAccount,
+  type Option,
+  type OptionOrNullable,
   type ReadonlyUint8Array,
 } from "@solana/kit";
 import {
+  getMatchCommitmentDecoder,
+  getMatchCommitmentEncoder,
   getMatchStatusDecoder,
   getMatchStatusEncoder,
+  getProposalSourceDecoder,
+  getProposalSourceEncoder,
+  type MatchCommitment,
+  type MatchCommitmentArgs,
   type MatchStatus,
   type MatchStatusArgs,
+  type ProposalSource,
+  type ProposalSourceArgs,
 } from "../types";
 
 export const MATCH_NODE_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([
@@ -58,6 +72,12 @@ export function getMatchNodeDiscriminatorBytes(): ReadonlyUint8Array {
 export type MatchNode = {
   discriminator: ReadonlyUint8Array;
   tournament: Address;
+  /**
+   * Bracket lane this node lives in. `0` for single-elimination (V1). Part
+   * of the PDA seed (C9 schema-prep): future formats add a losers' bracket
+   * (`1`) or per-group lanes without a second redeploy. Always `0` today.
+   */
+  bracket: number;
   round: number;
   matchIndex: number;
   playerA: Address;
@@ -66,10 +86,66 @@ export type MatchNode = {
   status: MatchStatus;
   bye: boolean;
   bump: number;
+  /** Origin of the pending proposal. `None` ⇒ envelope empty. */
+  proposalSource: ProposalSource;
+  /**
+   * Wallet that authored the pending proposal (a match player, or the
+   * oracle's reporter key). `Pubkey::default()` when empty.
+   */
+  proposer: Address;
+  /** Winner asserted by the pending proposal. */
+  proposedWinner: Address;
+  /** Unix time the proposal was recorded. */
+  proposedAt: bigint;
+  /**
+   * Unix time after which a permissionless finalize is allowed. Set to
+   * `proposed_at + dispute_window_secs` on propose; **re-armed** to
+   * `now + FORCE_CLAIM_WINDOW_SECS` (24h) on dispute. The `disputed` flag
+   * selects which permissionless ix may act past it: `claim_result` while
+   * `!disputed`, `force_claim_disputed` while `disputed` (organizer silence
+   * backstop). `resolve_dispute` ignores it — the organizer may act anytime.
+   */
+  claimDeadline: bigint;
+  /**
+   * Set by `dispute_result`; blocks `claim_result` and routes the match to
+   * the organizer arbitrator (`resolve_dispute`), with a 24h
+   * `force_claim_disputed` backstop against organizer silence.
+   */
+  disputed: boolean;
+  /**
+   * Free-form reason code supplied by the disputer (`0` = unspecified).
+   * Surfaced by the indexer's notification kernel; not interpreted on-chain.
+   */
+  disputeReason: number;
+  /**
+   * Pre-match lobby/identity commitment, written by `commit_match_lobby`.
+   * `None` for OrganizerOnly / PlayerReported matches.
+   */
+  commitment: Option<MatchCommitment>;
+  /**
+   * Switchboard On-Demand `PullFeedAccountData` PDA bound by
+   * `bind_match_feed`; `propose_result_oracle` reads the winner from it.
+   * `Pubkey::default()` (zero) ⇒ no feed bound.
+   */
+  switchboardFeed: Address;
+  /**
+   * Per-match score for `player_a` / `player_b`. Zero until a reporting path
+   * populates them — formats Phase A (Round Robin) consumes these for its
+   * point-differential tiebreaker; single-elim ignores them. Schema ships in
+   * Phase 1 so Phase A needs no account-layout migration.
+   */
+  scoreA: number;
+  scoreB: number;
 };
 
 export type MatchNodeArgs = {
   tournament: Address;
+  /**
+   * Bracket lane this node lives in. `0` for single-elimination (V1). Part
+   * of the PDA seed (C9 schema-prep): future formats add a losers' bracket
+   * (`1`) or per-group lanes without a second redeploy. Always `0` today.
+   */
+  bracket: number;
   round: number;
   matchIndex: number;
   playerA: Address;
@@ -78,14 +154,65 @@ export type MatchNodeArgs = {
   status: MatchStatusArgs;
   bye: boolean;
   bump: number;
+  /** Origin of the pending proposal. `None` ⇒ envelope empty. */
+  proposalSource: ProposalSourceArgs;
+  /**
+   * Wallet that authored the pending proposal (a match player, or the
+   * oracle's reporter key). `Pubkey::default()` when empty.
+   */
+  proposer: Address;
+  /** Winner asserted by the pending proposal. */
+  proposedWinner: Address;
+  /** Unix time the proposal was recorded. */
+  proposedAt: number | bigint;
+  /**
+   * Unix time after which a permissionless finalize is allowed. Set to
+   * `proposed_at + dispute_window_secs` on propose; **re-armed** to
+   * `now + FORCE_CLAIM_WINDOW_SECS` (24h) on dispute. The `disputed` flag
+   * selects which permissionless ix may act past it: `claim_result` while
+   * `!disputed`, `force_claim_disputed` while `disputed` (organizer silence
+   * backstop). `resolve_dispute` ignores it — the organizer may act anytime.
+   */
+  claimDeadline: number | bigint;
+  /**
+   * Set by `dispute_result`; blocks `claim_result` and routes the match to
+   * the organizer arbitrator (`resolve_dispute`), with a 24h
+   * `force_claim_disputed` backstop against organizer silence.
+   */
+  disputed: boolean;
+  /**
+   * Free-form reason code supplied by the disputer (`0` = unspecified).
+   * Surfaced by the indexer's notification kernel; not interpreted on-chain.
+   */
+  disputeReason: number;
+  /**
+   * Pre-match lobby/identity commitment, written by `commit_match_lobby`.
+   * `None` for OrganizerOnly / PlayerReported matches.
+   */
+  commitment: OptionOrNullable<MatchCommitmentArgs>;
+  /**
+   * Switchboard On-Demand `PullFeedAccountData` PDA bound by
+   * `bind_match_feed`; `propose_result_oracle` reads the winner from it.
+   * `Pubkey::default()` (zero) ⇒ no feed bound.
+   */
+  switchboardFeed: Address;
+  /**
+   * Per-match score for `player_a` / `player_b`. Zero until a reporting path
+   * populates them — formats Phase A (Round Robin) consumes these for its
+   * point-differential tiebreaker; single-elim ignores them. Schema ships in
+   * Phase 1 so Phase A needs no account-layout migration.
+   */
+  scoreA: number;
+  scoreB: number;
 };
 
 /** Gets the encoder for {@link MatchNodeArgs} account data. */
-export function getMatchNodeEncoder(): FixedSizeEncoder<MatchNodeArgs> {
+export function getMatchNodeEncoder(): Encoder<MatchNodeArgs> {
   return transformEncoder(
     getStructEncoder([
       ["discriminator", fixEncoderSize(getBytesEncoder(), 8)],
       ["tournament", getAddressEncoder()],
+      ["bracket", getU8Encoder()],
       ["round", getU8Encoder()],
       ["matchIndex", getU16Encoder()],
       ["playerA", getAddressEncoder()],
@@ -94,16 +221,28 @@ export function getMatchNodeEncoder(): FixedSizeEncoder<MatchNodeArgs> {
       ["status", getMatchStatusEncoder()],
       ["bye", getBooleanEncoder()],
       ["bump", getU8Encoder()],
+      ["proposalSource", getProposalSourceEncoder()],
+      ["proposer", getAddressEncoder()],
+      ["proposedWinner", getAddressEncoder()],
+      ["proposedAt", getI64Encoder()],
+      ["claimDeadline", getI64Encoder()],
+      ["disputed", getBooleanEncoder()],
+      ["disputeReason", getU8Encoder()],
+      ["commitment", getOptionEncoder(getMatchCommitmentEncoder())],
+      ["switchboardFeed", getAddressEncoder()],
+      ["scoreA", getU16Encoder()],
+      ["scoreB", getU16Encoder()],
     ]),
     (value) => ({ ...value, discriminator: MATCH_NODE_DISCRIMINATOR }),
   );
 }
 
 /** Gets the decoder for {@link MatchNode} account data. */
-export function getMatchNodeDecoder(): FixedSizeDecoder<MatchNode> {
+export function getMatchNodeDecoder(): Decoder<MatchNode> {
   return getStructDecoder([
     ["discriminator", fixDecoderSize(getBytesDecoder(), 8)],
     ["tournament", getAddressDecoder()],
+    ["bracket", getU8Decoder()],
     ["round", getU8Decoder()],
     ["matchIndex", getU16Decoder()],
     ["playerA", getAddressDecoder()],
@@ -112,11 +251,22 @@ export function getMatchNodeDecoder(): FixedSizeDecoder<MatchNode> {
     ["status", getMatchStatusDecoder()],
     ["bye", getBooleanDecoder()],
     ["bump", getU8Decoder()],
+    ["proposalSource", getProposalSourceDecoder()],
+    ["proposer", getAddressDecoder()],
+    ["proposedWinner", getAddressDecoder()],
+    ["proposedAt", getI64Decoder()],
+    ["claimDeadline", getI64Decoder()],
+    ["disputed", getBooleanDecoder()],
+    ["disputeReason", getU8Decoder()],
+    ["commitment", getOptionDecoder(getMatchCommitmentDecoder())],
+    ["switchboardFeed", getAddressDecoder()],
+    ["scoreA", getU16Decoder()],
+    ["scoreB", getU16Decoder()],
   ]);
 }
 
 /** Gets the codec for {@link MatchNode} account data. */
-export function getMatchNodeCodec(): FixedSizeCodec<MatchNodeArgs, MatchNode> {
+export function getMatchNodeCodec(): Codec<MatchNodeArgs, MatchNode> {
   return combineCodec(getMatchNodeEncoder(), getMatchNodeDecoder());
 }
 
@@ -171,8 +321,4 @@ export async function fetchAllMaybeMatchNode(
 ): Promise<MaybeAccount<MatchNode>[]> {
   const maybeAccounts = await fetchEncodedAccounts(rpc, addresses, config);
   return maybeAccounts.map((maybeAccount) => decodeMatchNode(maybeAccount));
-}
-
-export function getMatchNodeSize(): number {
-  return 142;
 }

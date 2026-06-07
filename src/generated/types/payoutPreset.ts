@@ -8,32 +8,101 @@
 
 import {
   combineCodec,
-  getEnumDecoder,
-  getEnumEncoder,
-  type FixedSizeCodec,
-  type FixedSizeDecoder,
-  type FixedSizeEncoder,
+  getArrayDecoder,
+  getArrayEncoder,
+  getDiscriminatedUnionDecoder,
+  getDiscriminatedUnionEncoder,
+  getStructDecoder,
+  getStructEncoder,
+  getTupleDecoder,
+  getTupleEncoder,
+  getU16Decoder,
+  getU16Encoder,
+  getUnitDecoder,
+  getUnitEncoder,
+  type Codec,
+  type Decoder,
+  type Encoder,
+  type GetDiscriminatedUnionVariant,
+  type GetDiscriminatedUnionVariantContent,
 } from "@solana/kit";
 
-export enum PayoutPreset {
-  WinnerTakesAll,
-  Standard,
-  Deep,
-}
+export type PayoutPreset =
+  | { __kind: "WinnerTakesAll" }
+  | { __kind: "Standard" }
+  | { __kind: "Deep" }
+  | { __kind: "Custom"; fields: readonly [Array<number>] };
 
 export type PayoutPresetArgs = PayoutPreset;
 
-export function getPayoutPresetEncoder(): FixedSizeEncoder<PayoutPresetArgs> {
-  return getEnumEncoder(PayoutPreset);
+export function getPayoutPresetEncoder(): Encoder<PayoutPresetArgs> {
+  return getDiscriminatedUnionEncoder([
+    ["WinnerTakesAll", getUnitEncoder()],
+    ["Standard", getUnitEncoder()],
+    ["Deep", getUnitEncoder()],
+    [
+      "Custom",
+      getStructEncoder([
+        [
+          "fields",
+          getTupleEncoder([getArrayEncoder(getU16Encoder(), { size: 8 })]),
+        ],
+      ]),
+    ],
+  ]);
 }
 
-export function getPayoutPresetDecoder(): FixedSizeDecoder<PayoutPreset> {
-  return getEnumDecoder(PayoutPreset);
+export function getPayoutPresetDecoder(): Decoder<PayoutPreset> {
+  return getDiscriminatedUnionDecoder([
+    ["WinnerTakesAll", getUnitDecoder()],
+    ["Standard", getUnitDecoder()],
+    ["Deep", getUnitDecoder()],
+    [
+      "Custom",
+      getStructDecoder([
+        [
+          "fields",
+          getTupleDecoder([getArrayDecoder(getU16Decoder(), { size: 8 })]),
+        ],
+      ]),
+    ],
+  ]);
 }
 
-export function getPayoutPresetCodec(): FixedSizeCodec<
-  PayoutPresetArgs,
-  PayoutPreset
-> {
+export function getPayoutPresetCodec(): Codec<PayoutPresetArgs, PayoutPreset> {
   return combineCodec(getPayoutPresetEncoder(), getPayoutPresetDecoder());
+}
+
+// Data Enum Helpers.
+export function payoutPreset(
+  kind: "WinnerTakesAll",
+): GetDiscriminatedUnionVariant<PayoutPresetArgs, "__kind", "WinnerTakesAll">;
+export function payoutPreset(
+  kind: "Standard",
+): GetDiscriminatedUnionVariant<PayoutPresetArgs, "__kind", "Standard">;
+export function payoutPreset(
+  kind: "Deep",
+): GetDiscriminatedUnionVariant<PayoutPresetArgs, "__kind", "Deep">;
+export function payoutPreset(
+  kind: "Custom",
+  data: GetDiscriminatedUnionVariantContent<
+    PayoutPresetArgs,
+    "__kind",
+    "Custom"
+  >["fields"],
+): GetDiscriminatedUnionVariant<PayoutPresetArgs, "__kind", "Custom">;
+export function payoutPreset<K extends PayoutPresetArgs["__kind"], Data>(
+  kind: K,
+  data?: Data,
+) {
+  return Array.isArray(data)
+    ? { __kind: kind, fields: data }
+    : { __kind: kind, ...(data ?? {}) };
+}
+
+export function isPayoutPreset<K extends PayoutPreset["__kind"]>(
+  kind: K,
+  value: PayoutPreset,
+): value is PayoutPreset & { __kind: K } {
+  return value.__kind === kind;
 }

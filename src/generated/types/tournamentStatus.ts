@@ -21,6 +21,7 @@ export enum TournamentStatus {
   Active,
   Completed,
   Cancelled,
+  PartialCancelled,
 }
 
 export type TournamentStatusArgs = TournamentStatus;

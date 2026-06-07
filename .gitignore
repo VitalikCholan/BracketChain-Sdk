@@ -5,3 +5,6 @@ dist/
 # WSL2 crash artifacts
 bash.exe.stackdump
 *.stackdump
+
+# build artifacts
+bracketchain-sdk-0.6.0-dev.tgz

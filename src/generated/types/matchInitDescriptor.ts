@@ -25,6 +25,11 @@ import {
 } from "@solana/kit";
 
 export type MatchInitDescriptor = {
+  /**
+   * Bracket lane — always `0` for single-elimination (V1). Part of the PDA
+   * seed (C9). See `MatchNode::bracket`.
+   */
+  bracket: number;
   round: number;
   matchIndex: number;
   bump: number;
@@ -37,6 +42,7 @@ export type MatchInitDescriptorArgs = MatchInitDescriptor;
 
 export function getMatchInitDescriptorEncoder(): FixedSizeEncoder<MatchInitDescriptorArgs> {
   return getStructEncoder([
+    ["bracket", getU8Encoder()],
     ["round", getU8Encoder()],
     ["matchIndex", getU16Encoder()],
     ["bump", getU8Encoder()],
@@ -48,6 +54,7 @@ export function getMatchInitDescriptorEncoder(): FixedSizeEncoder<MatchInitDescr
 
 export function getMatchInitDescriptorDecoder(): FixedSizeDecoder<MatchInitDescriptor> {
   return getStructDecoder([
+    ["bracket", getU8Decoder()],
     ["round", getU8Decoder()],
     ["matchIndex", getU16Decoder()],
     ["bump", getU8Decoder()],
