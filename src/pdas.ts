@@ -22,6 +22,12 @@ const MATCH_SEED = new Uint8Array([109, 97, 116, 99, 104]); // "match"
 
 export interface MatchSeeds {
   tournament: Address;
+  /**
+   * 0-indexed bracket lane (C9 schema-prep). Single-elimination V1 always uses
+   * `0`; future formats (double-elim losers' bracket, etc.) use higher lanes.
+   * Defaults to 0 when omitted. Must fit in a u8.
+   */
+  bracket?: number;
   /** 0-indexed bracket round; must fit in a u8. */
   round: number;
   /** 0-indexed match position within the round; must fit in a u16. */
@@ -29,7 +35,11 @@ export interface MatchSeeds {
 }
 
 /**
- * MatchNode PDA: ["match", tournament, [round: u8], match_index_le_bytes(u16)].
+ * MatchNode PDA:
+ * ["match", tournament, [bracket: u8], [round: u8], match_index_le_bytes(u16)].
+ *
+ * The `bracket` byte was added to the seed in V1 player-reported (C9) ahead of
+ * the formats work, so single-elim and future double-elim matches don't collide.
  *
  * Match accounts are passed as `remaining_accounts` to `start_tournament`, so
  * Codama doesn't auto-generate a finder for them — this is the hand-written
@@ -39,6 +49,10 @@ export async function findMatchPda(
   seeds: MatchSeeds,
   config: { programAddress?: Address } = {},
 ): Promise<ProgramDerivedAddress> {
+  const bracket = seeds.bracket ?? 0;
+  if (!Number.isInteger(bracket) || bracket < 0 || bracket > 255) {
+    throw new RangeError(`bracket must fit in u8 (0..255), got ${bracket}`);
+  }
   if (!Number.isInteger(seeds.round) || seeds.round < 0 || seeds.round > 255) {
     throw new RangeError(`round must fit in u8 (0..255), got ${seeds.round}`);
   }
@@ -60,6 +74,7 @@ export async function findMatchPda(
     seeds: [
       getBytesEncoder().encode(MATCH_SEED),
       getAddressEncoder().encode(seeds.tournament),
+      new Uint8Array([bracket]),
       new Uint8Array([seeds.round]),
       matchIndexLe,
     ],

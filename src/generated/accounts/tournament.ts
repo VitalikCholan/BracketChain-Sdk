@@ -53,10 +53,22 @@ import {
 import {
   getPayoutPresetDecoder,
   getPayoutPresetEncoder,
+  getSettlementModeDecoder,
+  getSettlementModeEncoder,
+  getSupportedGameDecoder,
+  getSupportedGameEncoder,
+  getTournamentFormatDecoder,
+  getTournamentFormatEncoder,
   getTournamentStatusDecoder,
   getTournamentStatusEncoder,
   type PayoutPreset,
   type PayoutPresetArgs,
+  type SettlementMode,
+  type SettlementModeArgs,
+  type SupportedGame,
+  type SupportedGameArgs,
+  type TournamentFormat,
+  type TournamentFormatArgs,
   type TournamentStatus,
   type TournamentStatusArgs,
 } from "../types";
@@ -81,16 +93,21 @@ export type Tournament = {
   vault: Address;
   entryFee: bigint;
   /**
-   * Optional organizer top-up to the prize pool, transferred into the vault
-   * at creation. `0` is allowed. Refunded back to the organizer if the
-   * tournament is cancelled before the first match. On completion, it stays
-   * in the vault and is distributed as part of the prize pool (Variant B).
+   * Optional organizer top-up transferred into the vault at creation.
+   * `0` is allowed. Treated as a sponsored prize contribution (Variant B,
+   * R13 ratified 2026-06-05): stays in the vault on completion and is
+   * distributed as part of the prize-pool basis (`gross_pool =
+   * vault.amount`, including this deposit; the protocol fee applies to it).
+   * Refunded only on the cancel paths — pre-start `cancel_tournament` and
+   * mid-tournament `partial_refund_chunk`.
    */
   organizerDeposit: bigint;
   /**
-   * Tracks whether the organizer's deposit refund has been issued during a
-   * cancellation. Independent of per-participant `refund_paid` flags so the
-   * two paths can be processed in any order across cancel chunks.
+   * Set true once the deposit has been refunded by `cancel_tournament` or
+   * `partial_refund_chunk` (any-call, idempotent across chunks). Only
+   * meaningful on the `Cancelled` / `PartialCancelled` paths — on
+   * `Completed`, the deposit goes to placements, not back to the
+   * organizer, and this flag stays `false`.
    */
   organizerDepositRefunded: boolean;
   maxParticipants: number;
@@ -109,6 +126,36 @@ export type Tournament = {
   champion: Address;
   bump: number;
   vaultBump: number;
+  /** Game played; gates SAS identity requirement at `join_tournament`. */
+  game: SupportedGame;
+  /** Who may report results. Locked at create-time. */
+  settlementMode: SettlementMode;
+  /**
+   * Dispute window (seconds) for PlayerReported / Oracle settlement. Unused
+   * by OrganizerOnly. Wired by the V1 player-reported stage of this redeploy.
+   */
+  disputeWindowSecs: number;
+  /** Switchboard randomness account committed via `request_seed` (VRF stage). */
+  vrfRandomnessAccount: Address;
+  /** Slot the VRF commitment was made at; `reveal_seed` reads after it passes. */
+  vrfCommitSlot: bigint;
+  /**
+   * True once `reveal_seed` has populated `seed_hash` from VRF. Gates
+   * `start_tournament` for non-OrganizerOnly tournaments.
+   */
+  seedRevealed: boolean;
+  /**
+   * May dispute an Oracle proposal and call `resolve_dispute`. Defaults to
+   * `organizer` at create-time (Squads multisig reassignment is V1.3).
+   */
+  arbitrator: Address;
+  /**
+   * Bracket topology. Locked at create-time; V1 only accepts `SingleElim`
+   * (others rejected with `FormatNotYetSupported` until formats Phases A-C
+   * lift their gates). Zero variant == `SingleElim`, so pre-R15 accounts
+   * zero-fill correctly under `migrate_v1_tournament`-style reallocs.
+   */
+  format: TournamentFormat;
 };
 
 export type TournamentArgs = {
@@ -122,16 +169,21 @@ export type TournamentArgs = {
   vault: Address;
   entryFee: number | bigint;
   /**
-   * Optional organizer top-up to the prize pool, transferred into the vault
-   * at creation. `0` is allowed. Refunded back to the organizer if the
-   * tournament is cancelled before the first match. On completion, it stays
-   * in the vault and is distributed as part of the prize pool (Variant B).
+   * Optional organizer top-up transferred into the vault at creation.
+   * `0` is allowed. Treated as a sponsored prize contribution (Variant B,
+   * R13 ratified 2026-06-05): stays in the vault on completion and is
+   * distributed as part of the prize-pool basis (`gross_pool =
+   * vault.amount`, including this deposit; the protocol fee applies to it).
+   * Refunded only on the cancel paths — pre-start `cancel_tournament` and
+   * mid-tournament `partial_refund_chunk`.
    */
   organizerDeposit: number | bigint;
   /**
-   * Tracks whether the organizer's deposit refund has been issued during a
-   * cancellation. Independent of per-participant `refund_paid` flags so the
-   * two paths can be processed in any order across cancel chunks.
+   * Set true once the deposit has been refunded by `cancel_tournament` or
+   * `partial_refund_chunk` (any-call, idempotent across chunks). Only
+   * meaningful on the `Cancelled` / `PartialCancelled` paths — on
+   * `Completed`, the deposit goes to placements, not back to the
+   * organizer, and this flag stays `false`.
    */
   organizerDepositRefunded: boolean;
   maxParticipants: number;
@@ -150,6 +202,36 @@ export type TournamentArgs = {
   champion: Address;
   bump: number;
   vaultBump: number;
+  /** Game played; gates SAS identity requirement at `join_tournament`. */
+  game: SupportedGameArgs;
+  /** Who may report results. Locked at create-time. */
+  settlementMode: SettlementModeArgs;
+  /**
+   * Dispute window (seconds) for PlayerReported / Oracle settlement. Unused
+   * by OrganizerOnly. Wired by the V1 player-reported stage of this redeploy.
+   */
+  disputeWindowSecs: number;
+  /** Switchboard randomness account committed via `request_seed` (VRF stage). */
+  vrfRandomnessAccount: Address;
+  /** Slot the VRF commitment was made at; `reveal_seed` reads after it passes. */
+  vrfCommitSlot: number | bigint;
+  /**
+   * True once `reveal_seed` has populated `seed_hash` from VRF. Gates
+   * `start_tournament` for non-OrganizerOnly tournaments.
+   */
+  seedRevealed: boolean;
+  /**
+   * May dispute an Oracle proposal and call `resolve_dispute`. Defaults to
+   * `organizer` at create-time (Squads multisig reassignment is V1.3).
+   */
+  arbitrator: Address;
+  /**
+   * Bracket topology. Locked at create-time; V1 only accepts `SingleElim`
+   * (others rejected with `FormatNotYetSupported` until formats Phases A-C
+   * lift their gates). Zero variant == `SingleElim`, so pre-R15 accounts
+   * zero-fill correctly under `migrate_v1_tournament`-style reallocs.
+   */
+  format: TournamentFormatArgs;
 };
 
 /** Gets the encoder for {@link TournamentArgs} account data. */
@@ -180,6 +262,14 @@ export function getTournamentEncoder(): Encoder<TournamentArgs> {
       ["champion", getAddressEncoder()],
       ["bump", getU8Encoder()],
       ["vaultBump", getU8Encoder()],
+      ["game", getSupportedGameEncoder()],
+      ["settlementMode", getSettlementModeEncoder()],
+      ["disputeWindowSecs", getU32Encoder()],
+      ["vrfRandomnessAccount", getAddressEncoder()],
+      ["vrfCommitSlot", getU64Encoder()],
+      ["seedRevealed", getBooleanEncoder()],
+      ["arbitrator", getAddressEncoder()],
+      ["format", getTournamentFormatEncoder()],
     ]),
     (value) => ({ ...value, discriminator: TOURNAMENT_DISCRIMINATOR }),
   );
@@ -212,6 +302,14 @@ export function getTournamentDecoder(): Decoder<Tournament> {
     ["champion", getAddressDecoder()],
     ["bump", getU8Decoder()],
     ["vaultBump", getU8Decoder()],
+    ["game", getSupportedGameDecoder()],
+    ["settlementMode", getSettlementModeDecoder()],
+    ["disputeWindowSecs", getU32Decoder()],
+    ["vrfRandomnessAccount", getAddressDecoder()],
+    ["vrfCommitSlot", getU64Decoder()],
+    ["seedRevealed", getBooleanDecoder()],
+    ["arbitrator", getAddressDecoder()],
+    ["format", getTournamentFormatDecoder()],
   ]);
 }
 

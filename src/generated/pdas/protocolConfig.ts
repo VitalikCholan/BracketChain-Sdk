@@ -17,7 +17,7 @@ export async function findProtocolConfigPda(
   config: { programAddress?: Address | undefined } = {},
 ): Promise<ProgramDerivedAddress> {
   const {
-    programAddress = "AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1" as Address<"AuXJKpuZtkegs2ZSgopgckhN7Ev8bUz4zBc238LD2F1">,
+    programAddress = "EF19YVUerm5QW1CsZeqiPDAFFtaXgdt6WuYBGeiz9Q1z" as Address<"EF19YVUerm5QW1CsZeqiPDAFFtaXgdt6WuYBGeiz9Q1z">,
   } = config;
   return await getProgramDerivedAddress({
     programAddress,

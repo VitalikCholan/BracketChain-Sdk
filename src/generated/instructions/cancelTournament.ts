@@ -119,7 +119,9 @@ export type CancelTournamentAsyncInput<
   TAccountTokenProgram extends string = string,
 > = {
   /**
-   * Only required to be the organizer when flipping status to Cancelled.
+   * Only required to be the organizer when flipping status to Cancelled
+   * before `registration_deadline + ABANDONED_CANCEL_GRACE_SECS`; past that,
+   * any signer may flip an abandoned pre-start tournament (H-2 backstop).
    * Once status == Cancelled, any signer can call to process refund chunks.
    */
   caller: TransactionSigner<TAccountCaller>;
@@ -224,7 +226,9 @@ export type CancelTournamentInput<
   TAccountTokenProgram extends string = string,
 > = {
   /**
-   * Only required to be the organizer when flipping status to Cancelled.
+   * Only required to be the organizer when flipping status to Cancelled
+   * before `registration_deadline + ABANDONED_CANCEL_GRACE_SECS`; past that,
+   * any signer may flip an abandoned pre-start tournament (H-2 backstop).
    * Once status == Cancelled, any signer can call to process refund chunks.
    */
   caller: TransactionSigner<TAccountCaller>;
@@ -318,7 +322,9 @@ export type ParsedCancelTournamentInstruction<
   programAddress: Address<TProgram>;
   accounts: {
     /**
-     * Only required to be the organizer when flipping status to Cancelled.
+     * Only required to be the organizer when flipping status to Cancelled
+     * before `registration_deadline + ABANDONED_CANCEL_GRACE_SECS`; past that,
+     * any signer may flip an abandoned pre-start tournament (H-2 backstop).
      * Once status == Cancelled, any signer can call to process refund chunks.
      */
     caller: TAccountMetas[0];

@@ -29,8 +29,14 @@ import {
   findVaultPda,
   getCreateTournamentInstructionAsync,
   PayoutPreset,
+  SettlementMode,
+  SupportedGame,
+  TournamentFormat,
 } from "../generated";
 import { assertSigner, sendInstructions } from "./_send";
+
+/** Default dispute window for player-reported / oracle settlement (1 hour). */
+const DEFAULT_DISPUTE_WINDOW_SECS = 3600;
 
 // On-chain bounds — must mirror `bracket-chain-programs/src/constants.rs`.
 const MAX_TOURNAMENT_NAME_BYTES = 32;
@@ -38,11 +44,21 @@ const MIN_PARTICIPANTS = 2;
 const MAX_PARTICIPANTS = 128;
 
 // Per-preset minimum players. Mirrors `PayoutPreset::min_participants()`.
-const PRESET_MIN_PARTICIPANTS: Record<PayoutPreset, number> = {
-  [PayoutPreset.WinnerTakesAll]: 1,
-  [PayoutPreset.Standard]: 3,
-  [PayoutPreset.Deep]: 7,
-};
+// `Custom` = the number of funded (non-zero) placement slots (= placement_count).
+function presetMinParticipants(preset: PayoutPreset): number | undefined {
+  switch (preset.__kind) {
+    case "WinnerTakesAll":
+      return 1;
+    case "Standard":
+      return 3;
+    case "Deep":
+      return 7;
+    case "Custom":
+      return preset.fields[0].filter((bps) => bps > 0).length;
+    default:
+      return undefined;
+  }
+}
 
 export interface CreateTournamentConfig {
   /** UTF-8 name, ≤32 bytes (not characters). Used in the tournament PDA seed. */
@@ -51,7 +67,11 @@ export interface CreateTournamentConfig {
   entryFee: bigint | number;
   /** Hard cap, [2, 128]. Bracket size derives from this at start time. */
   maxParticipants: number;
-  /** Payout preset — Codama enum `PayoutPreset.{WinnerTakesAll,Standard,Deep}`. */
+  /**
+   * Payout preset — Codama data-enum. Fixed presets:
+   * `{ __kind: "WinnerTakesAll" | "Standard" | "Deep" }`; arbitrary split:
+   * `{ __kind: "Custom", fields: [[u16; 8]] }` (bps summing to 10_000).
+   */
   payoutPreset: PayoutPreset;
   /** Unix timestamp (seconds). Must be strictly greater than the on-chain clock at submit time. */
   registrationDeadline: bigint | number;
@@ -66,6 +86,30 @@ export interface CreateTournamentConfig {
    * missing) and transfers the deposit into the vault on the same tx.
    */
   organizerDeposit?: bigint | number;
+  /**
+   * Game this tournament is played in (V1.1). Defaults to `SupportedGame.Manual`.
+   * Phase 1 supports `Manual` + `Dota2` only — `Cs2Faceit`/`Valorant`/`LoL`
+   * are rejected on-chain with `GameNotYetSupported`.
+   */
+  game?: SupportedGame;
+  /**
+   * Who reports match results (V1.1). Defaults to `SettlementMode.OrganizerOnly`.
+   * `PlayerReported` / `Oracle` open the propose/dispute/claim flow and (for
+   * verifiable seeding) expect the organizer to call `requestSeed` before start.
+   */
+  settlementMode?: SettlementMode;
+  /**
+   * Dispute window in seconds for player-reported / oracle proposals. Defaults
+   * to 1 hour. Ignored by `OrganizerOnly` tournaments.
+   */
+  disputeWindowSecs?: number;
+  /**
+   * Bracket topology (R15 schema-prep). Defaults to
+   * `TournamentFormat.SingleElim` — the only format V1 accepts; the others are
+   * reserved on-chain and rejected with `FormatNotYetSupported` until formats
+   * Phases A-C ship.
+   */
+  format?: TournamentFormat;
 }
 
 export interface CreateTournamentResult {
@@ -120,10 +164,10 @@ export async function createTournament(
   if (config.maxParticipants > MAX_PARTICIPANTS)
     throw new MaxParticipantsExceededError();
 
-  const presetMin = PRESET_MIN_PARTICIPANTS[config.payoutPreset];
+  const presetMin = presetMinParticipants(config.payoutPreset);
   if (presetMin === undefined) {
     throw new BracketChainSDKError(
-      `Unknown payout preset variant: ${String(config.payoutPreset)}`,
+      `Unknown payout preset variant: ${String(config.payoutPreset.__kind)}`,
       "InvalidArgument",
     );
   }
@@ -209,6 +253,10 @@ export async function createTournament(
     payoutPreset: config.payoutPreset,
     registrationDeadline,
     organizerDeposit,
+    game: config.game ?? SupportedGame.Manual,
+    settlementMode: config.settlementMode ?? SettlementMode.OrganizerOnly,
+    disputeWindowSecs: config.disputeWindowSecs ?? DEFAULT_DISPUTE_WINDOW_SECS,
+    format: config.format ?? TournamentFormat.SingleElim,
   });
 
   try {

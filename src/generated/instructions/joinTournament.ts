@@ -37,7 +37,11 @@ import {
   getAddressFromResolvedInstructionAccount,
   type ResolvedInstructionAccount,
 } from "@solana/program-client-core";
-import { findParticipantPda, findVaultPda } from "../pdas";
+import {
+  findParticipantPda,
+  findProtocolConfigPda,
+  findVaultPda,
+} from "../pdas";
 import { BRACKET_CHAIN_PROGRAM_ADDRESS } from "../programs";
 
 export const JOIN_TOURNAMENT_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array(
@@ -54,9 +58,11 @@ export type JoinTournamentInstruction<
   TProgram extends string = typeof BRACKET_CHAIN_PROGRAM_ADDRESS,
   TAccountPlayer extends string | AccountMeta<string> = string,
   TAccountTournament extends string | AccountMeta<string> = string,
+  TAccountProtocolConfig extends string | AccountMeta<string> = string,
   TAccountParticipant extends string | AccountMeta<string> = string,
   TAccountPlayerTokenAccount extends string | AccountMeta<string> = string,
   TAccountVault extends string | AccountMeta<string> = string,
+  TAccountGameIdentityAttestation extends string | AccountMeta<string> = string,
   TAccountTokenProgram extends string | AccountMeta<string> =
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
   TAccountSystemProgram extends string | AccountMeta<string> =
@@ -73,6 +79,9 @@ export type JoinTournamentInstruction<
       TAccountTournament extends string
         ? WritableAccount<TAccountTournament>
         : TAccountTournament,
+      TAccountProtocolConfig extends string
+        ? ReadonlyAccount<TAccountProtocolConfig>
+        : TAccountProtocolConfig,
       TAccountParticipant extends string
         ? WritableAccount<TAccountParticipant>
         : TAccountParticipant,
@@ -82,6 +91,9 @@ export type JoinTournamentInstruction<
       TAccountVault extends string
         ? WritableAccount<TAccountVault>
         : TAccountVault,
+      TAccountGameIdentityAttestation extends string
+        ? ReadonlyAccount<TAccountGameIdentityAttestation>
+        : TAccountGameIdentityAttestation,
       TAccountTokenProgram extends string
         ? ReadonlyAccount<TAccountTokenProgram>
         : TAccountTokenProgram,
@@ -124,17 +136,26 @@ export function getJoinTournamentInstructionDataCodec(): FixedSizeCodec<
 export type JoinTournamentAsyncInput<
   TAccountPlayer extends string = string,
   TAccountTournament extends string = string,
+  TAccountProtocolConfig extends string = string,
   TAccountParticipant extends string = string,
   TAccountPlayerTokenAccount extends string = string,
   TAccountVault extends string = string,
+  TAccountGameIdentityAttestation extends string = string,
   TAccountTokenProgram extends string = string,
   TAccountSystemProgram extends string = string,
 > = {
   player: TransactionSigner<TAccountPlayer>;
   tournament: Address<TAccountTournament>;
+  protocolConfig?: Address<TAccountProtocolConfig>;
   participant?: Address<TAccountParticipant>;
   playerTokenAccount: Address<TAccountPlayerTokenAccount>;
   vault?: Address<TAccountVault>;
+  /**
+   * credential + schema match `protocol_config`, nonce == player, not
+   * expired). Required when `tournament.game != Manual`; pass `None` for
+   * Manual tournaments.
+   */
+  gameIdentityAttestation?: Address<TAccountGameIdentityAttestation>;
   tokenProgram?: Address<TAccountTokenProgram>;
   systemProgram?: Address<TAccountSystemProgram>;
 };
@@ -142,9 +163,11 @@ export type JoinTournamentAsyncInput<
 export async function getJoinTournamentInstructionAsync<
   TAccountPlayer extends string,
   TAccountTournament extends string,
+  TAccountProtocolConfig extends string,
   TAccountParticipant extends string,
   TAccountPlayerTokenAccount extends string,
   TAccountVault extends string,
+  TAccountGameIdentityAttestation extends string,
   TAccountTokenProgram extends string,
   TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof BRACKET_CHAIN_PROGRAM_ADDRESS,
@@ -152,9 +175,11 @@ export async function getJoinTournamentInstructionAsync<
   input: JoinTournamentAsyncInput<
     TAccountPlayer,
     TAccountTournament,
+    TAccountProtocolConfig,
     TAccountParticipant,
     TAccountPlayerTokenAccount,
     TAccountVault,
+    TAccountGameIdentityAttestation,
     TAccountTokenProgram,
     TAccountSystemProgram
   >,
@@ -164,9 +189,11 @@ export async function getJoinTournamentInstructionAsync<
     TProgramAddress,
     TAccountPlayer,
     TAccountTournament,
+    TAccountProtocolConfig,
     TAccountParticipant,
     TAccountPlayerTokenAccount,
     TAccountVault,
+    TAccountGameIdentityAttestation,
     TAccountTokenProgram,
     TAccountSystemProgram
   >
@@ -179,12 +206,17 @@ export async function getJoinTournamentInstructionAsync<
   const originalAccounts = {
     player: { value: input.player ?? null, isWritable: true },
     tournament: { value: input.tournament ?? null, isWritable: true },
+    protocolConfig: { value: input.protocolConfig ?? null, isWritable: false },
     participant: { value: input.participant ?? null, isWritable: true },
     playerTokenAccount: {
       value: input.playerTokenAccount ?? null,
       isWritable: true,
     },
     vault: { value: input.vault ?? null, isWritable: true },
+    gameIdentityAttestation: {
+      value: input.gameIdentityAttestation ?? null,
+      isWritable: false,
+    },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
     systemProgram: { value: input.systemProgram ?? null, isWritable: false },
   };
@@ -194,6 +226,9 @@ export async function getJoinTournamentInstructionAsync<
   >;
 
   // Resolve default values.
+  if (!accounts.protocolConfig.value) {
+    accounts.protocolConfig.value = await findProtocolConfigPda();
+  }
   if (!accounts.participant.value) {
     accounts.participant.value = await findParticipantPda({
       tournament: getAddressFromResolvedInstructionAccount(
@@ -228,9 +263,14 @@ export async function getJoinTournamentInstructionAsync<
     accounts: [
       getAccountMeta("player", accounts.player),
       getAccountMeta("tournament", accounts.tournament),
+      getAccountMeta("protocolConfig", accounts.protocolConfig),
       getAccountMeta("participant", accounts.participant),
       getAccountMeta("playerTokenAccount", accounts.playerTokenAccount),
       getAccountMeta("vault", accounts.vault),
+      getAccountMeta(
+        "gameIdentityAttestation",
+        accounts.gameIdentityAttestation,
+      ),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
       getAccountMeta("systemProgram", accounts.systemProgram),
     ],
@@ -240,9 +280,11 @@ export async function getJoinTournamentInstructionAsync<
     TProgramAddress,
     TAccountPlayer,
     TAccountTournament,
+    TAccountProtocolConfig,
     TAccountParticipant,
     TAccountPlayerTokenAccount,
     TAccountVault,
+    TAccountGameIdentityAttestation,
     TAccountTokenProgram,
     TAccountSystemProgram
   >);
@@ -251,17 +293,26 @@ export async function getJoinTournamentInstructionAsync<
 export type JoinTournamentInput<
   TAccountPlayer extends string = string,
   TAccountTournament extends string = string,
+  TAccountProtocolConfig extends string = string,
   TAccountParticipant extends string = string,
   TAccountPlayerTokenAccount extends string = string,
   TAccountVault extends string = string,
+  TAccountGameIdentityAttestation extends string = string,
   TAccountTokenProgram extends string = string,
   TAccountSystemProgram extends string = string,
 > = {
   player: TransactionSigner<TAccountPlayer>;
   tournament: Address<TAccountTournament>;
+  protocolConfig: Address<TAccountProtocolConfig>;
   participant: Address<TAccountParticipant>;
   playerTokenAccount: Address<TAccountPlayerTokenAccount>;
   vault: Address<TAccountVault>;
+  /**
+   * credential + schema match `protocol_config`, nonce == player, not
+   * expired). Required when `tournament.game != Manual`; pass `None` for
+   * Manual tournaments.
+   */
+  gameIdentityAttestation?: Address<TAccountGameIdentityAttestation>;
   tokenProgram?: Address<TAccountTokenProgram>;
   systemProgram?: Address<TAccountSystemProgram>;
 };
@@ -269,9 +320,11 @@ export type JoinTournamentInput<
 export function getJoinTournamentInstruction<
   TAccountPlayer extends string,
   TAccountTournament extends string,
+  TAccountProtocolConfig extends string,
   TAccountParticipant extends string,
   TAccountPlayerTokenAccount extends string,
   TAccountVault extends string,
+  TAccountGameIdentityAttestation extends string,
   TAccountTokenProgram extends string,
   TAccountSystemProgram extends string,
   TProgramAddress extends Address = typeof BRACKET_CHAIN_PROGRAM_ADDRESS,
@@ -279,9 +332,11 @@ export function getJoinTournamentInstruction<
   input: JoinTournamentInput<
     TAccountPlayer,
     TAccountTournament,
+    TAccountProtocolConfig,
     TAccountParticipant,
     TAccountPlayerTokenAccount,
     TAccountVault,
+    TAccountGameIdentityAttestation,
     TAccountTokenProgram,
     TAccountSystemProgram
   >,
@@ -290,9 +345,11 @@ export function getJoinTournamentInstruction<
   TProgramAddress,
   TAccountPlayer,
   TAccountTournament,
+  TAccountProtocolConfig,
   TAccountParticipant,
   TAccountPlayerTokenAccount,
   TAccountVault,
+  TAccountGameIdentityAttestation,
   TAccountTokenProgram,
   TAccountSystemProgram
 > {
@@ -304,12 +361,17 @@ export function getJoinTournamentInstruction<
   const originalAccounts = {
     player: { value: input.player ?? null, isWritable: true },
     tournament: { value: input.tournament ?? null, isWritable: true },
+    protocolConfig: { value: input.protocolConfig ?? null, isWritable: false },
     participant: { value: input.participant ?? null, isWritable: true },
     playerTokenAccount: {
       value: input.playerTokenAccount ?? null,
       isWritable: true,
     },
     vault: { value: input.vault ?? null, isWritable: true },
+    gameIdentityAttestation: {
+      value: input.gameIdentityAttestation ?? null,
+      isWritable: false,
+    },
     tokenProgram: { value: input.tokenProgram ?? null, isWritable: false },
     systemProgram: { value: input.systemProgram ?? null, isWritable: false },
   };
@@ -333,9 +395,14 @@ export function getJoinTournamentInstruction<
     accounts: [
       getAccountMeta("player", accounts.player),
       getAccountMeta("tournament", accounts.tournament),
+      getAccountMeta("protocolConfig", accounts.protocolConfig),
       getAccountMeta("participant", accounts.participant),
       getAccountMeta("playerTokenAccount", accounts.playerTokenAccount),
       getAccountMeta("vault", accounts.vault),
+      getAccountMeta(
+        "gameIdentityAttestation",
+        accounts.gameIdentityAttestation,
+      ),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
       getAccountMeta("systemProgram", accounts.systemProgram),
     ],
@@ -345,9 +412,11 @@ export function getJoinTournamentInstruction<
     TProgramAddress,
     TAccountPlayer,
     TAccountTournament,
+    TAccountProtocolConfig,
     TAccountParticipant,
     TAccountPlayerTokenAccount,
     TAccountVault,
+    TAccountGameIdentityAttestation,
     TAccountTokenProgram,
     TAccountSystemProgram
   >);
@@ -361,11 +430,18 @@ export type ParsedJoinTournamentInstruction<
   accounts: {
     player: TAccountMetas[0];
     tournament: TAccountMetas[1];
-    participant: TAccountMetas[2];
-    playerTokenAccount: TAccountMetas[3];
-    vault: TAccountMetas[4];
-    tokenProgram: TAccountMetas[5];
-    systemProgram: TAccountMetas[6];
+    protocolConfig: TAccountMetas[2];
+    participant: TAccountMetas[3];
+    playerTokenAccount: TAccountMetas[4];
+    vault: TAccountMetas[5];
+    /**
+     * credential + schema match `protocol_config`, nonce == player, not
+     * expired). Required when `tournament.game != Manual`; pass `None` for
+     * Manual tournaments.
+     */
+    gameIdentityAttestation?: TAccountMetas[6] | undefined;
+    tokenProgram: TAccountMetas[7];
+    systemProgram: TAccountMetas[8];
   };
   data: JoinTournamentInstructionData;
 };
@@ -378,12 +454,12 @@ export function parseJoinTournamentInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedJoinTournamentInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 7) {
+  if (instruction.accounts.length < 9) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 7,
+        expectedAccountMetas: 9,
       },
     );
   }
@@ -393,14 +469,22 @@ export function parseJoinTournamentInstruction<
     accountIndex += 1;
     return accountMeta;
   };
+  const getNextOptionalAccount = () => {
+    const accountMeta = getNextAccount();
+    return accountMeta.address === BRACKET_CHAIN_PROGRAM_ADDRESS
+      ? undefined
+      : accountMeta;
+  };
   return {
     programAddress: instruction.programAddress,
     accounts: {
       player: getNextAccount(),
       tournament: getNextAccount(),
+      protocolConfig: getNextAccount(),
       participant: getNextAccount(),
       playerTokenAccount: getNextAccount(),
       vault: getNextAccount(),
+      gameIdentityAttestation: getNextOptionalAccount(),
       tokenProgram: getNextAccount(),
       systemProgram: getNextAccount(),
     },

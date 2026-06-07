@@ -225,6 +225,11 @@ async function reportFinal(
     tokenProgram: TOKEN_PROGRAM_ADDRESS,
   });
 
+  // Variant B (R13, ratified 2026-06-05): the organizer deposit stays in the
+  // vault and is distributed as part of the prize pool, so the final match
+  // needs NO organizer ATA — `organizer_token_account` was removed from the
+  // ReportResult accounts entirely.
+
   // Idempotently create every ATA we depend on (winner placements + treasury).
   const dedupeSet = new Set<Address>();
   const ataInstructions = [];
@@ -251,7 +256,6 @@ async function reportFinal(
       }),
     );
   }
-
   const remainingAccounts: AccountMeta[] = [
     ...placementAtas.map(({ ata }) => ({
       address: ata,
@@ -288,17 +292,21 @@ async function reportFinal(
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Mirrors `PayoutPreset::placement_count()` — the number of funded placements.
+// `Custom` counts its non-zero bps slots.
 function getPlacementCount(preset: PayoutPreset): number {
-  switch (preset) {
-    case PayoutPreset.WinnerTakesAll:
+  switch (preset.__kind) {
+    case "WinnerTakesAll":
       return 1;
-    case PayoutPreset.Standard:
+    case "Standard":
       return 3;
-    case PayoutPreset.Deep:
+    case "Deep":
       return 7;
+    case "Custom":
+      return preset.fields[0].filter((bps) => bps > 0).length;
     default:
       throw new BracketChainSDKError(
-        `Unknown payout preset: ${String(preset)}`,
+        `Unknown payout preset: ${String((preset as { __kind?: string }).__kind)}`,
         "InvalidArgument",
       );
   }

@@ -14,6 +14,10 @@ export type {
 export {
   MatchStatus,
   PayoutPreset,
+  ProposalSource,
+  SettlementMode,
+  SupportedGame,
+  TournamentFormat,
   TournamentStatus,
 } from "./generated";
 
