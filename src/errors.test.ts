@@ -23,6 +23,7 @@ import {
   AttestationRequiredError,
   BracketChainSDKError,
   ClaimWindowNotElapsedError,
+  FormatNotYetSupportedError,
   GameNotSupportedError,
   InsufficientBalanceError,
   InsufficientFundsError,
@@ -64,6 +65,7 @@ describe("mapError — typed class mapping", () => {
     [6032, SettlementModeError],
     [6038, ClaimWindowNotElapsedError],
     [6041, SeedNotRevealedError],
+    [6065, FormatNotYetSupportedError],
     // Tier B — reuse of existing classes
     [6055, InvalidPayoutPresetError], // InvalidCustomPayout
     [6037, NonParticipantWinnerError], // InvalidProposedWinner
@@ -115,9 +117,9 @@ describe("mapError — generic TransactionFailedError codes (bug #3 regression)"
 // ── C. drift-guard for bug #2 — every code in range is named ──────────────────
 
 describe("mapError — error-code coverage (bug #2 drift-guard)", () => {
-  it("maps every code in [6000, 6059] without falling through to generic", () => {
+  it("maps every code in [6000, 6065] without falling through to generic", () => {
     const unmapped: number[] = [];
-    for (let code = 6000; code <= 6059; code++) {
+    for (let code = 6000; code <= 6065; code++) {
       if (/On-chain custom error code/.test(mapError(custom(code)).message)) {
         unmapped.push(code);
       }
@@ -129,10 +131,10 @@ describe("mapError — error-code coverage (bug #2 drift-guard)", () => {
     );
   });
 
-  it("an out-of-range code (6060) falls through to the generic fallback", () => {
-    const err = mapError(custom(6060));
+  it("an out-of-range code (6066) falls through to the generic fallback", () => {
+    const err = mapError(custom(6066));
     assert.ok(err instanceof TransactionFailedError);
-    assert.match(err.message, /On-chain custom error code 6060/);
+    assert.match(err.message, /On-chain custom error code 6066/);
   });
 });
 

@@ -17,6 +17,7 @@ export {
   ProposalSource,
   SettlementMode,
   SupportedGame,
+  TournamentFormat,
   TournamentStatus,
 } from "./generated";
 

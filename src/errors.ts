@@ -298,6 +298,20 @@ export class SeedNotRevealedError extends BracketChainSDKError {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// R15 formats schema-prep
+// ─────────────────────────────────────────────────────────────────────────────
+
+export class FormatNotYetSupportedError extends BracketChainSDKError {
+  constructor(cause?: unknown) {
+    super(
+      "Tournament format is reserved but not yet supported — V1 is single-elimination only (DoubleElim / Swiss / RoundRobin ship in formats Phases A-C).",
+      "FormatNotYetSupported",
+      cause,
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Generic / fallback
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -396,6 +410,14 @@ const ERRORS_RS_ORDER = [
   "BracketSeedMismatch", // 6057
   "NonParticipantInBracket", // 6058
   "InvalidOracleConfig", // 6059
+  // ── Phase 1 closeout hardening (appended) ─────────────────────────────────
+  "ParticipantRefundPending", // 6060
+  "AbandonGraceNotElapsed", // 6061
+  "NonCanonicalBump", // 6062
+  "PlacementNotParticipant", // 6063
+  "DuplicatePlacement", // 6064
+  // ── R15 formats schema-prep (appended) ────────────────────────────────────
+  "FormatNotYetSupported", // 6065
 ] as const;
 
 type OnChainErrorName = (typeof ERRORS_RS_ORDER)[number];
@@ -502,6 +524,19 @@ const ON_CHAIN_TO_SDK: Record<
   NonParticipantInBracket: (c) => new NonParticipantWinnerError(c),
   InvalidOracleConfig: (c) =>
     new TransactionFailedError("Oracle config out of bounds (min_oracle_samples >= 1; max_stale_slots within ceiling)", c),
+  // ── Phase 1 closeout hardening ────────────────────────────────────────────
+  ParticipantRefundPending: (c) =>
+    new TransactionFailedError("Participant has an unpaid refund; drive the refund chunk before closing this account", c),
+  AbandonGraceNotElapsed: (c) =>
+    new TransactionFailedError("Abandoned-tournament grace has not elapsed; only the organizer may cancel before registration_deadline + grace", c),
+  NonCanonicalBump: (c) =>
+    new TransactionFailedError("Match descriptor bump is not the canonical PDA bump", c),
+  PlacementNotParticipant: (c) =>
+    new TransactionFailedError("Placement wallet is not a registered Participant of this tournament", c),
+  DuplicatePlacement: (c) =>
+    new TransactionFailedError("Placements must be pairwise distinct", c),
+  // ── R15 formats schema-prep ───────────────────────────────────────────────
+  FormatNotYetSupported: (c) => new FormatNotYetSupportedError(c),
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

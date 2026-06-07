@@ -55,7 +55,11 @@ export interface FinalizeContext {
   participantB: Address;
   /** Idempotent ATA-create instructions to prepend to the tx (final only). */
   ataInstructions: Instruction[];
-  /** Writable placement + treasury ATAs to append as remaining accounts. */
+  /**
+   * Remaining accounts for the finalize ix (final only): writable placement
+   * ATAs ++ writable treasury ATA ++ read-only Participant PDA membership
+   * proofs for `placements[2..]` (M-2).
+   */
   remainingAccounts: AccountMeta[];
 }
 
@@ -162,6 +166,13 @@ export async function buildFinalizeContext(
       );
     }
   }
+  // M-2 (mirrors on-chain DuplicatePlacement): placements must be pairwise
+  // distinct — a duplicated wallet would collect multiple placement payouts.
+  if (new Set(placements).size !== placements.length) {
+    throw new InvalidPayoutPresetError(
+      new Error("placements must be pairwise distinct"),
+    );
+  }
 
   const [protocolConfigPda] = await findProtocolConfigPda();
   let treasury: Address;
@@ -206,12 +217,30 @@ export async function buildFinalizeContext(
   for (const { wallet, ata } of placementAtas) await ensureAta(wallet, ata);
   await ensureAta(treasury, treasuryAta);
 
+  // M-2: each adjudicated placement (3rd..Nth) must prove tournament
+  // membership via its Participant PDA, appended READ-ONLY after the treasury
+  // ATA. Layout (mirrors `settlement.rs::distribute_prizes`):
+  //   [placement ATAs] ++ [treasury ATA] ++ [Participant PDA per placements[2..]]
+  const participantProofs = await Promise.all(
+    placements.slice(2).map(async (wallet) => {
+      const [pda] = await findParticipantPda({
+        tournament: tournamentPda,
+        player: wallet,
+      });
+      return pda;
+    }),
+  );
+
   const remainingAccounts: AccountMeta[] = [
     ...placementAtas.map(({ ata }) => ({
       address: ata,
       role: AccountRole.WRITABLE,
     })),
     { address: treasuryAta, role: AccountRole.WRITABLE },
+    ...participantProofs.map((pda) => ({
+      address: pda,
+      role: AccountRole.READONLY,
+    })),
   ];
 
   return {

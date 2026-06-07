@@ -128,6 +128,14 @@ export type MatchNode = {
    * `Pubkey::default()` (zero) ⇒ no feed bound.
    */
   switchboardFeed: Address;
+  /**
+   * Per-match score for `player_a` / `player_b`. Zero until a reporting path
+   * populates them — formats Phase A (Round Robin) consumes these for its
+   * point-differential tiebreaker; single-elim ignores them. Schema ships in
+   * Phase 1 so Phase A needs no account-layout migration.
+   */
+  scoreA: number;
+  scoreB: number;
 };
 
 export type MatchNodeArgs = {
@@ -188,6 +196,14 @@ export type MatchNodeArgs = {
    * `Pubkey::default()` (zero) ⇒ no feed bound.
    */
   switchboardFeed: Address;
+  /**
+   * Per-match score for `player_a` / `player_b`. Zero until a reporting path
+   * populates them — formats Phase A (Round Robin) consumes these for its
+   * point-differential tiebreaker; single-elim ignores them. Schema ships in
+   * Phase 1 so Phase A needs no account-layout migration.
+   */
+  scoreA: number;
+  scoreB: number;
 };
 
 /** Gets the encoder for {@link MatchNodeArgs} account data. */
@@ -214,6 +230,8 @@ export function getMatchNodeEncoder(): Encoder<MatchNodeArgs> {
       ["disputeReason", getU8Encoder()],
       ["commitment", getOptionEncoder(getMatchCommitmentEncoder())],
       ["switchboardFeed", getAddressEncoder()],
+      ["scoreA", getU16Encoder()],
+      ["scoreB", getU16Encoder()],
     ]),
     (value) => ({ ...value, discriminator: MATCH_NODE_DISCRIMINATOR }),
   );
@@ -242,6 +260,8 @@ export function getMatchNodeDecoder(): Decoder<MatchNode> {
     ["disputeReason", getU8Decoder()],
     ["commitment", getOptionDecoder(getMatchCommitmentDecoder())],
     ["switchboardFeed", getAddressDecoder()],
+    ["scoreA", getU16Decoder()],
+    ["scoreB", getU16Decoder()],
   ]);
 }
 

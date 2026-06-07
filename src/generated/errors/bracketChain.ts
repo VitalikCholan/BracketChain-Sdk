@@ -134,8 +134,21 @@ export const BRACKET_CHAIN_ERROR__BRACKET_SEED_MISMATCH = 0x17a9; // 6057
 export const BRACKET_CHAIN_ERROR__NON_PARTICIPANT_IN_BRACKET = 0x17aa; // 6058
 /** InvalidOracleConfig: Oracle config out of bounds (min_oracle_samples must be >= 1; max_stale_slots must not exceed the staleness ceiling) */
 export const BRACKET_CHAIN_ERROR__INVALID_ORACLE_CONFIG = 0x17ab; // 6059
+/** ParticipantRefundPending: Participant has an unpaid refund; drive the refund chunk before closing this account */
+export const BRACKET_CHAIN_ERROR__PARTICIPANT_REFUND_PENDING = 0x17ac; // 6060
+/** AbandonGraceNotElapsed: Abandoned-tournament grace period has not elapsed; only the organizer may cancel before registration_deadline + grace */
+export const BRACKET_CHAIN_ERROR__ABANDON_GRACE_NOT_ELAPSED = 0x17ad; // 6061
+/** NonCanonicalBump: Match descriptor bump is not the canonical PDA bump */
+export const BRACKET_CHAIN_ERROR__NON_CANONICAL_BUMP = 0x17ae; // 6062
+/** PlacementNotParticipant: Placement wallet is not a registered Participant of this tournament */
+export const BRACKET_CHAIN_ERROR__PLACEMENT_NOT_PARTICIPANT = 0x17af; // 6063
+/** DuplicatePlacement: Placements must be pairwise distinct */
+export const BRACKET_CHAIN_ERROR__DUPLICATE_PLACEMENT = 0x17b0; // 6064
+/** FormatNotYetSupported: Tournament format is reserved but not yet supported (V1 is single-elimination only) */
+export const BRACKET_CHAIN_ERROR__FORMAT_NOT_YET_SUPPORTED = 0x17b1; // 6065
 
 export type BracketChainError =
+  | typeof BRACKET_CHAIN_ERROR__ABANDON_GRACE_NOT_ELAPSED
   | typeof BRACKET_CHAIN_ERROR__ALREADY_REGISTERED
   | typeof BRACKET_CHAIN_ERROR__ARITHMETIC_OVERFLOW
   | typeof BRACKET_CHAIN_ERROR__ATTESTATION_EXPIRED
@@ -144,6 +157,8 @@ export type BracketChainError =
   | typeof BRACKET_CHAIN_ERROR__BAD_PROPOSAL_SOURCE
   | typeof BRACKET_CHAIN_ERROR__BRACKET_SEED_MISMATCH
   | typeof BRACKET_CHAIN_ERROR__CLAIM_WINDOW_NOT_ELAPSED
+  | typeof BRACKET_CHAIN_ERROR__DUPLICATE_PLACEMENT
+  | typeof BRACKET_CHAIN_ERROR__FORMAT_NOT_YET_SUPPORTED
   | typeof BRACKET_CHAIN_ERROR__GAME_NOT_YET_SUPPORTED
   | typeof BRACKET_CHAIN_ERROR__INVALID_ATTESTATION_OWNER
   | typeof BRACKET_CHAIN_ERROR__INVALID_CUSTOM_PAYOUT
@@ -165,6 +180,7 @@ export type BracketChainError =
   | typeof BRACKET_CHAIN_ERROR__MIGRATION_NOT_NEEDED
   | typeof BRACKET_CHAIN_ERROR__MIN_PARTICIPANTS_NOT_MET
   | typeof BRACKET_CHAIN_ERROR__NAME_TOO_LONG
+  | typeof BRACKET_CHAIN_ERROR__NON_CANONICAL_BUMP
   | typeof BRACKET_CHAIN_ERROR__NON_PARTICIPANT_IN_BRACKET
   | typeof BRACKET_CHAIN_ERROR__NON_PARTICIPANT_WINNER
   | typeof BRACKET_CHAIN_ERROR__NO_PROPOSAL
@@ -176,6 +192,8 @@ export type BracketChainError =
   | typeof BRACKET_CHAIN_ERROR__NOT_PLAYER_IN_MATCH
   | typeof BRACKET_CHAIN_ERROR__ORACLE_WINNER_NOT_IN_MATCH
   | typeof BRACKET_CHAIN_ERROR__PARENT_MATCHES_NOT_COMPLETE
+  | typeof BRACKET_CHAIN_ERROR__PARTICIPANT_REFUND_PENDING
+  | typeof BRACKET_CHAIN_ERROR__PLACEMENT_NOT_PARTICIPANT
   | typeof BRACKET_CHAIN_ERROR__PRESET_EXCEEDS_PARTICIPANTS
   | typeof BRACKET_CHAIN_ERROR__PROPOSAL_ALREADY_EXISTS
   | typeof BRACKET_CHAIN_ERROR__PROPOSAL_DISPUTED
@@ -200,6 +218,7 @@ export type BracketChainError =
 let bracketChainErrorMessages: Record<BracketChainError, string> | undefined;
 if (process.env["NODE_ENV"] !== "production") {
   bracketChainErrorMessages = {
+    [BRACKET_CHAIN_ERROR__ABANDON_GRACE_NOT_ELAPSED]: `Abandoned-tournament grace period has not elapsed; only the organizer may cancel before registration_deadline + grace`,
     [BRACKET_CHAIN_ERROR__ALREADY_REGISTERED]: `Wallet is already registered for this tournament`,
     [BRACKET_CHAIN_ERROR__ARITHMETIC_OVERFLOW]: `Arithmetic overflow`,
     [BRACKET_CHAIN_ERROR__ATTESTATION_EXPIRED]: `Attestation has expired`,
@@ -208,6 +227,8 @@ if (process.env["NODE_ENV"] !== "production") {
     [BRACKET_CHAIN_ERROR__BAD_PROPOSAL_SOURCE]: `Proposal source is not valid for this action`,
     [BRACKET_CHAIN_ERROR__BRACKET_SEED_MISMATCH]: `Bracket descriptor is inconsistent with the VRF-derived seed permutation`,
     [BRACKET_CHAIN_ERROR__CLAIM_WINDOW_NOT_ELAPSED]: `Claim window has not elapsed yet`,
+    [BRACKET_CHAIN_ERROR__DUPLICATE_PLACEMENT]: `Placements must be pairwise distinct`,
+    [BRACKET_CHAIN_ERROR__FORMAT_NOT_YET_SUPPORTED]: `Tournament format is reserved but not yet supported (V1 is single-elimination only)`,
     [BRACKET_CHAIN_ERROR__GAME_NOT_YET_SUPPORTED]: `Selected game is not yet supported for tournament creation`,
     [BRACKET_CHAIN_ERROR__INVALID_ATTESTATION_OWNER]: `Attestation account is not owned by the SAS program`,
     [BRACKET_CHAIN_ERROR__INVALID_CUSTOM_PAYOUT]: `Custom payout split is invalid (bps must sum to 10000, be gapless, and fund the winner)`,
@@ -229,6 +250,7 @@ if (process.env["NODE_ENV"] !== "production") {
     [BRACKET_CHAIN_ERROR__MIGRATION_NOT_NEEDED]: `Tournament account is already at the V1 layout; migration not needed`,
     [BRACKET_CHAIN_ERROR__MIN_PARTICIPANTS_NOT_MET]: `Participant count is below the protocol minimum (2)`,
     [BRACKET_CHAIN_ERROR__NAME_TOO_LONG]: `Tournament name exceeds 32 bytes`,
+    [BRACKET_CHAIN_ERROR__NON_CANONICAL_BUMP]: `Match descriptor bump is not the canonical PDA bump`,
     [BRACKET_CHAIN_ERROR__NON_PARTICIPANT_IN_BRACKET]: `Account supplied for a bracket slot is not a Participant of this tournament`,
     [BRACKET_CHAIN_ERROR__NON_PARTICIPANT_WINNER]: `Reported winner is not a participant of the tournament`,
     [BRACKET_CHAIN_ERROR__NO_PROPOSAL]: `Match has no pending proposal`,
@@ -240,6 +262,8 @@ if (process.env["NODE_ENV"] !== "production") {
     [BRACKET_CHAIN_ERROR__NOT_PLAYER_IN_MATCH]: `Signer is not a player in this match`,
     [BRACKET_CHAIN_ERROR__ORACLE_WINNER_NOT_IN_MATCH]: `Oracle feed value did not match either committed player identity`,
     [BRACKET_CHAIN_ERROR__PARENT_MATCHES_NOT_COMPLETE]: `Match parents not yet completed; cannot report this match`,
+    [BRACKET_CHAIN_ERROR__PARTICIPANT_REFUND_PENDING]: `Participant has an unpaid refund; drive the refund chunk before closing this account`,
+    [BRACKET_CHAIN_ERROR__PLACEMENT_NOT_PARTICIPANT]: `Placement wallet is not a registered Participant of this tournament`,
     [BRACKET_CHAIN_ERROR__PRESET_EXCEEDS_PARTICIPANTS]: `Selected payout preset requires more participants than configured`,
     [BRACKET_CHAIN_ERROR__PROPOSAL_ALREADY_EXISTS]: `Match already has a pending proposal`,
     [BRACKET_CHAIN_ERROR__PROPOSAL_DISPUTED]: `Proposal is disputed; it cannot be claimed`,

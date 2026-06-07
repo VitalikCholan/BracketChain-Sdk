@@ -57,6 +57,8 @@ import {
   getSettlementModeEncoder,
   getSupportedGameDecoder,
   getSupportedGameEncoder,
+  getTournamentFormatDecoder,
+  getTournamentFormatEncoder,
   getTournamentStatusDecoder,
   getTournamentStatusEncoder,
   type PayoutPreset,
@@ -65,6 +67,8 @@ import {
   type SettlementModeArgs,
   type SupportedGame,
   type SupportedGameArgs,
+  type TournamentFormat,
+  type TournamentFormatArgs,
   type TournamentStatus,
   type TournamentStatusArgs,
 } from "../types";
@@ -145,6 +149,13 @@ export type Tournament = {
    * `organizer` at create-time (Squads multisig reassignment is V1.3).
    */
   arbitrator: Address;
+  /**
+   * Bracket topology. Locked at create-time; V1 only accepts `SingleElim`
+   * (others rejected with `FormatNotYetSupported` until formats Phases A-C
+   * lift their gates). Zero variant == `SingleElim`, so pre-R15 accounts
+   * zero-fill correctly under `migrate_v1_tournament`-style reallocs.
+   */
+  format: TournamentFormat;
 };
 
 export type TournamentArgs = {
@@ -214,6 +225,13 @@ export type TournamentArgs = {
    * `organizer` at create-time (Squads multisig reassignment is V1.3).
    */
   arbitrator: Address;
+  /**
+   * Bracket topology. Locked at create-time; V1 only accepts `SingleElim`
+   * (others rejected with `FormatNotYetSupported` until formats Phases A-C
+   * lift their gates). Zero variant == `SingleElim`, so pre-R15 accounts
+   * zero-fill correctly under `migrate_v1_tournament`-style reallocs.
+   */
+  format: TournamentFormatArgs;
 };
 
 /** Gets the encoder for {@link TournamentArgs} account data. */
@@ -251,6 +269,7 @@ export function getTournamentEncoder(): Encoder<TournamentArgs> {
       ["vrfCommitSlot", getU64Encoder()],
       ["seedRevealed", getBooleanEncoder()],
       ["arbitrator", getAddressEncoder()],
+      ["format", getTournamentFormatEncoder()],
     ]),
     (value) => ({ ...value, discriminator: TOURNAMENT_DISCRIMINATOR }),
   );
@@ -290,6 +309,7 @@ export function getTournamentDecoder(): Decoder<Tournament> {
     ["vrfCommitSlot", getU64Decoder()],
     ["seedRevealed", getBooleanDecoder()],
     ["arbitrator", getAddressDecoder()],
+    ["format", getTournamentFormatDecoder()],
   ]);
 }
 

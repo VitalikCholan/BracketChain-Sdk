@@ -29,7 +29,7 @@ Two orthogonal client classes — they share zero state and can be used independ
 - **`BracketChainClient`** wraps a Kit `Rpc` (+ optional `RpcSubscriptions`) for chain reads, transaction construction, and account-change subscriptions. Mutating methods require a `signer`; query methods do not.
 - **`BracketChainIndexerClient`** is a typed `fetch` wrapper for the indexer's REST API — fast listings, cached reads, AbortSignal-aware. Zero on-chain deps.
 
-Plus: 27 mutation + read methods spanning the full tournament lifecycle and all three settlement modes, 21 typed error classes with a `mapError` helper, 5 PDA helpers, six numeric enums, and account-subscription via `subscribe()`.
+Plus: 28 mutation + read methods spanning the full tournament lifecycle and all three settlement modes (including the arbitrator-signed `settleFinal` for multi-placement finals), 27 typed error subclasses with a `mapError` helper, 5 PDA helpers, seven numeric enums, and account-subscription via `subscribe()`.
 
 ### Settlement modes
 
@@ -38,7 +38,7 @@ A tournament's `settlementMode` is locked at create-time and decides who finaliz
 | Mode | Who reports | Methods |
 |---|---|---|
 | `OrganizerOnly` (default, MVP) | The organizer | `reportResult` |
-| `PlayerReported` (Stage B) | Players propose → counterparty confirms/disputes → permissionless claim → organizer arbitrates disputes | `proposeResult`, `confirmResult`, `disputeResult`, `claimResult`, `resolveDispute`, `forceClaimDisputed` |
+| `PlayerReported` (Stage B) | Players propose → counterparty confirms/disputes → permissionless claim → organizer arbitrates disputes | `proposeResult`, `confirmResult`, `disputeResult`, `claimResult`, `resolveDispute`, `forceClaimDisputed`, `settleFinal` |
 | `Oracle` (Stage C / V1.2) | A Switchboard On-Demand feed proposes; the same propose/dispute/claim envelope finalizes | `commitMatchLobby`, `bindMatchFeed`, `proposeResultOracle` (+ the dispute methods above) |
 
 `PlayerReported` and `Oracle` tournaments also expect verifiable bracket seeding via `requestSeed` (organizer, pre-start) + `revealSeed` (permissionless cron), and may be torn down with `cancelTournament` / `partialRefundChunk` / `closeTournament`.
@@ -172,6 +172,12 @@ await resolveDispute(client, { tournamentPda, round: 0, matchIndex: 0, winner })
 ```
 
 `forceClaimDisputed` is the permissionless escape hatch: it finalizes a *disputed* match for the proposed winner once the 24h force-claim window elapses and the organizer has stayed silent. The final-match calls (`confirmResult` / `claimResult` / `resolveDispute` / `forceClaimDisputed`) accept the same `placements` array as `reportResult` and distribute prizes the same way.
+
+**Multi-placement finals settle via the arbitrator (H-1).** Permissionless and counterparty paths may only finalize `WinnerTakesAll` finals — on `Standard` / `Deep` / `Custom` finals the program rejects them with `UntrustedMultiPlacementFinal`. The routing cheat-sheet:
+
+- WTA final → permissionless `claimResult`
+- Multi-placement final, **undisputed** past the window → arbitrator-signed `settleFinal` (winner stays pinned to the proposal; the arbitrator only adjudicates placements 3..N)
+- **Disputed** final (any preset) → `resolveDispute`
 
 ### Verifiable seeding (VRF)
 
@@ -325,6 +331,7 @@ All methods accept an `AbortSignal` for cancellation. BigInt fields arrive as de
 | `disputeResult(client, params)` | `dispute_result` — counterparty disputes; routes to organizer, re-arms deadline +24h |
 | `claimResult(client, params)` | `claim_result` — permissionless finalize of an undisputed proposal past its deadline |
 | `resolveDispute(client, params)` | `resolve_dispute` — organizer/arbitrator settles a disputed match |
+| `settleFinal(client, params)` | `settle_final` — arbitrator-signed settlement of an undisputed multi-placement (non-WTA) final; adjudicates placements 3..N |
 | `forceClaimDisputed(client, params)` | `force_claim_disputed` — permissionless finalize of a disputed match after the 24h organizer-silence backstop |
 
 ### Mutations — VRF seeding (Stage B)
@@ -343,7 +350,7 @@ All methods accept an `AbortSignal` for cancellation. BigInt fields arrive as de
 | `bindMatchFeed(client, params)` | `bind_match_feed` — organizer binds a Switchboard PullFeed to a committed match |
 | `proposeResultOracle(client, params)` | `propose_result_oracle` — permissionless relayer writes the feed-reported winner (`source = Oracle`) |
 
-Every mutation returns at least a `txSignature`; the finalize methods (`reportResult`, `confirmResult`, `claimResult`, `resolveDispute`, `forceClaimDisputed`) also return `isFinal`. The chunked methods (`startTournament`, `cancelTournament`, `partialRefundChunk`, `closeTournament`) return a `txSignatures[]` array.
+Every mutation returns at least a `txSignature`; the finalize methods (`reportResult`, `confirmResult`, `claimResult`, `resolveDispute`, `forceClaimDisputed`, `settleFinal`) also return `isFinal`. The chunked methods (`startTournament`, `cancelTournament`, `partialRefundChunk`, `closeTournament`) return a `txSignatures[]` array.
 
 ### PDA helpers — all `async`, return `ProgramDerivedAddress` (`[Address, number]`)
 
@@ -518,7 +525,7 @@ pnpm typecheck       # tsc --noEmit (no emit; check types only)
 │   ├── index.ts              # the only public entry
 │   ├── client.ts             # BracketChainClient (Kit)
 │   ├── api.ts                # BracketChainIndexerClient + Indexer* types
-│   ├── errors.ts             # 21 error classes + mapError
+│   ├── errors.ts             # 27 typed error subclasses + mapError
 │   ├── pdas.ts               # findMatchPda + re-exports of generated finders
 │   ├── types.ts              # WithAddress + composite read shapes, re-exports from generated/
 │   ├── generated/            # Codama output — accounts, instructions, decoders, PDA finders

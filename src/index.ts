@@ -50,6 +50,7 @@ export {
   ProposalSource,
   SettlementMode,
   SupportedGame,
+  TournamentFormat,
   TournamentStatus,
 } from "./types";
 
@@ -161,6 +162,7 @@ export {
   AttestationRequiredError,
   BracketChainSDKError,
   ClaimWindowNotElapsedError,
+  FormatNotYetSupportedError,
   GameNotSupportedError,
   InsufficientBalanceError,
   InsufficientFundsError,
