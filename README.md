@@ -424,11 +424,11 @@ try {
 
 ## Architecture notes
 
-### Two orthogonal clients, deliberately
+### Protocol-only, deliberately (0.6.0)
 
-A read-only viewer page (`/t/[id]`) instantiates a `BracketChainIndexerClient` for fast paginated reads and a signer-less `BracketChainClient` purely as an RPC fallback for the `getTournament` chain read when the indexer is stale. Neither needs the other's state. A writing page (`/create`) instantiates a `BracketChainClient` with a `signer`. The write path never touches the indexer client.
+The classification test for every export: *what must minimally exist in the world for this call to return?* If the answer is "Solana validators" the export belongs here; if the answer is "a server some operator runs" it does not. That is why the indexer REST client moved out to the web app in 0.6.0, while the oracle feed-job builder moved IN: its `endpointBaseUrl` is a caller-supplied parameter and the hash it produces is verified **on-chain** by `bind_match_feed` — any operator hosting a compatible `/oracle/dota-winner` endpoint produces a valid feed.
 
-This keeps the SDK composable across all four BracketChain frontend route types (read-only public, write-with-wallet, organizer dashboard, explore listing) without forcing a single "god client" on consumers.
+Practical consequence: anyone can run their own crank, their own oracle endpoint, and their own read cache against the program with nothing but this package and an RPC URL — the BracketChain-operated indexer is a convenience, not a dependency.
 
 ### The settlement envelope is source-agnostic
 
@@ -505,10 +505,12 @@ pnpm typecheck       # tsc --noEmit (no emit; check types only)
 ├── src/
 │   ├── index.ts              # the only public entry
 │   ├── client.ts             # BracketChainClient (Kit)
-│   ├── api.ts                # BracketChainIndexerClient + Indexer* types
 │   ├── errors.ts             # 27 typed error subclasses + mapError
 │   ├── pdas.ts               # findMatchPda + re-exports of generated finders
 │   ├── types.ts              # WithAddress + composite read shapes, re-exports from generated/
+│   ├── seeding.ts            # cross-language VRF Fisher-Yates (golden-vector-locked)
+│   ├── oracle/
+│   │   └── dotaFeedJob.ts    # canonical Dota 2 OracleJob + computeDotaFeedHash (golden test)
 │   ├── generated/            # Codama output — accounts, instructions, decoders, PDA finders
 │   └── methods/
 │       ├── createTournament.ts joinTournament.ts startTournament.ts
@@ -537,7 +539,7 @@ pnpm typecheck       # tsc --noEmit (no emit; check types only)
 |---|---|
 | [`bracketchain-main`](../bracketchain-main) | Top-level README, hackathon plan, MVP-vs-V1 deltas, demo script |
 | [`bracket-chain-programs`](../bracket-chain-programs) | The Anchor program — source IDL for Codama generation |
-| [`bracket-chain-indexer`](../bracket-chain-indexer) | NestJS read API + Helius webhook ingestor — REST surface consumed by `BracketChainIndexerClient` |
+| [`bracket-chain-indexer`](../bracket-chain-indexer) | NestJS protocol backend — read API + Helius webhook ingestor + permissionless cranks + oracle data-plane (all built on this SDK) |
 | [`BracketChain-Frontend`](../BracketChain-Frontend) | Next.js web app — primary consumer of this SDK |
 
 ---
