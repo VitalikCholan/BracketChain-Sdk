@@ -1,5 +1,6 @@
 import {
   appendTransactionMessageInstructions,
+  compressTransactionMessageUsingAddressLookupTables,
   createTransactionMessage,
   getSignatureFromTransaction,
   pipe,
@@ -7,6 +8,7 @@ import {
   setTransactionMessageFeePayerSigner,
   setTransactionMessageLifetimeUsingBlockhash,
   signTransactionMessageWithSigners,
+  type AddressesByLookupTableAddress,
   type Instruction,
   type Signature,
   type TransactionSigner,
@@ -22,6 +24,13 @@ export interface SendOptions {
    * instruction when provided.
    */
   computeUnits?: number;
+  /**
+   * Address-lookup tables to compress the v0 message with
+   * (`{ [lutAddress]: addresses[] }`). Needed when bundled pre-instructions
+   * (e.g. a Switchboard feed update) reference more accounts than fit in the
+   * 1232-byte packet uncompressed. No-op when empty.
+   */
+  lookupTables?: AddressesByLookupTableAddress;
 }
 
 /**
@@ -75,11 +84,16 @@ export async function sendInstructions(
       .getLatestBlockhash({ commitment: client.commitment })
       .send();
 
+    const lookupTables = opts.lookupTables ?? {};
     const message = pipe(
       createTransactionMessage({ version: 0 }),
       (m) => setTransactionMessageFeePayerSigner(payer, m),
       (m) => setTransactionMessageLifetimeUsingBlockhash(latestBlockhash, m),
       (m) => appendTransactionMessageInstructions(ixs, m),
+      (m) =>
+        Object.keys(lookupTables).length > 0
+          ? compressTransactionMessageUsingAddressLookupTables(m, lookupTables)
+          : m,
     );
 
     const signedTx = await signTransactionMessageWithSigners(message);

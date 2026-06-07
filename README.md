@@ -12,24 +12,26 @@ pnpm add @bracketchain/sdk
 
 | Field | Value |
 |---|---|
-| Version | [![npm](https://img.shields.io/npm/v/@bracketchain/sdk)](https://www.npmjs.com/package/@bracketchain/sdk) — `0.6.0-dev` |
+| Version | [![npm](https://img.shields.io/npm/v/@bracketchain/sdk)](https://www.npmjs.com/package/@bracketchain/sdk) — `0.6.0` |
 | License | MIT |
 | Build | tsup, CJS + ESM dual, types included |
 | Client base | [`@solana/kit`](https://www.npmjs.com/package/@solana/kit) 6.9 — no `@coral-xyz/anchor`, no `@solana/web3.js` v1 in the runtime |
 | Generated tree | [Codama](https://github.com/codama-idl/codama) — accounts, instructions, decoders, PDA finders |
-| Devnet program | `3YpkUKBh8288XN2dCKSwBnEdyc5UozSJ19A1ZCLpUZsZ` |
+| Devnet program | `EF19YVUerm5QW1CsZeqiPDAFFtaXgdt6WuYBGeiz9Q1z` |
 | Subpaths | none yet — `./react` hooks subpath is V1 (reference hooks live in [`BracketChain-Frontend/hooks/`](../BracketChain-Frontend/hooks)) |
 
 ---
 
 ## What's in the box
 
-Two orthogonal client classes — they share zero state and can be used independently:
+This SDK is **protocol-only**: everything it exports works against a bare Solana RPC node — no BracketChain-operated service is required for any export to function.
 
 - **`BracketChainClient`** wraps a Kit `Rpc` (+ optional `RpcSubscriptions`) for chain reads, transaction construction, and account-change subscriptions. Mutating methods require a `signer`; query methods do not.
-- **`BracketChainIndexerClient`** is a typed `fetch` wrapper for the indexer's REST API — fast listings, cached reads, AbortSignal-aware. Zero on-chain deps.
+- **Determinism artifacts** — pure modules that reproduce bytes the on-chain program validates: `seeding.ts` (cross-language VRF Fisher-Yates, golden-vector-locked against the Rust program) and `oracle/dotaFeedJob.ts` (the canonical Dota 2 winner OracleJob + `computeDotaFeedHash`, whose SHA-256 must equal the committed `expected_feed_hash`).
 
 Plus: 28 mutation + read methods spanning the full tournament lifecycle and all three settlement modes (including the arbitrator-signed `settleFinal` for multi-placement finals), 27 typed error subclasses with a `mapError` helper, 5 PDA helpers, seven numeric enums, and account-subscription via `subscribe()`.
+
+> **Where did `BracketChainIndexerClient` go?** Removed in 0.6.0. The typed REST wrapper for the BracketChain indexer was a *platform* client (it presumes a service we operate), so it moved to its only consumer — the web app (`BracketChain-Frontend/lib/indexerClient.ts`). If you were using it, copy that file; the wire contract is unchanged.
 
 ### Settlement modes
 
@@ -46,24 +48,6 @@ A tournament's `settlementMode` is locked at create-time and decides who finaliz
 ---
 
 ## Quick start
-
-### Read-only — listing tournaments via the indexer
-
-For pages that don't need a wallet (e.g. `/explore`, public tournament view).
-
-```ts
-import { BracketChainIndexerClient } from "@bracketchain/sdk";
-
-const indexer = new BracketChainIndexerClient({
-  baseUrl: "https://bracketchain-indexer-production.up.railway.app",
-});
-
-const tournaments = await indexer.listTournaments({
-  status: "Registration",
-  limit: 20,
-});
-// tournaments: IndexerTournament[]  (BigInt fields are decimal strings)
-```
 
 ### Read-only — single tournament from chain (no signer)
 
@@ -277,7 +261,6 @@ Everything below is re-exported from `@bracketchain/sdk`. Anything not listed is
 | Export | Purpose |
 |---|---|
 | `BracketChainClient` | Kit-backed wrapper — `rpc`, `rpcSubscriptions?`, `signer?`, `programAddress`, `canSign` |
-| `BracketChainIndexerClient` | REST wrapper for the indexer service |
 
 ### Reads (chain — `BracketChainClient`)
 
@@ -287,22 +270,20 @@ Everything below is re-exported from `@bracketchain/sdk`. Anything not listed is
 | `getMatch(client, pda)` | `MatchNode` |
 | `getParticipant(client, pda)` | `Participant` |
 | `getProtocolConfig(client, pda)` | `ProtocolConfig` |
-| `listTournaments(client)` | `TournamentWithAddress[]` (uses `getProgramAccounts`; prefer `BracketChainIndexerClient.listTournaments` for paginated UI listings) |
+| `listTournaments(client)` | `TournamentWithAddress[]` (uses `getProgramAccounts`; for paginated UI listings prefer an indexer-backed read path) |
 | `getAllMatches(client, tournamentPda)` | `MatchNodeWithAddress[]` (sorted by `round`, `matchIndex`) |
 | `listParticipants(client, tournamentPda)` | `ParticipantWithAddress[]` (sorted by `seedIndex`) |
 | `getTournamentState(client, pda)` | `TournamentState` — composite read of tournament + bracket + participants |
 
-### Reads (REST — `BracketChainIndexerClient`)
+### Oracle feed-job determinism artifacts (Phase 1.5)
 
-| Method | Endpoint |
+| Export | Purpose |
 |---|---|
-| `listTournaments(opts)` | `GET /tournaments?status=&limit=` |
-| `getTournament(addr)` | `GET /tournaments/:address` |
-| `getPayouts(addr, opts)` | `GET /tournaments/:address/payouts` |
-| `getParticipants(addr, opts)` | `GET /tournaments/:address/participants` |
-| `getMatches(addr, opts)` | `GET /tournaments/:address/matches` |
+| `buildDotaWinnerJobs(params)` | The canonical single-job Switchboard `IOracleJob[]` for a Dota 2 match winner — `HttpTask(GET {base}/oracle/dota-winner?lobby=&a=&b=&source=opendota)` → `JsonParseTask($.winner)` |
+| `buildDotaWinnerUrl(params)` | The exact URL embedded (and SHA-256-committed) in the job — query-param order is part of the hash |
+| `computeDotaFeedHash(queueBase58, params)` | 32-byte `expected_feed_hash` for `commitMatchLobby` / `bindMatchFeed` — `SHA-256(queue ++ jobs)`, computed offline |
 
-All methods accept an `AbortSignal` for cancellation. BigInt fields arrive as decimal strings.
+These reproduce bytes the program validates in `bind_match_feed`, so every call site (commit panel, feed creation, endpoint tests) MUST use this builder — a one-character drift produces a hash no feed can ever match. Guarded by a golden-vector test, like `seeding.ts`.
 
 ### Mutations — lifecycle
 

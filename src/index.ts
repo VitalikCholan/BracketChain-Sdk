@@ -135,26 +135,27 @@ export type {
   TournamentSubscriptionEvent,
 } from "./methods";
 
-// Indexer client — typed REST wrapper for the indexer service.
-// Composes orthogonally with BracketChainClient.
-export { BracketChainIndexerClient } from "./api";
+// Oracle feed-job determinism artifacts (Phase 1.5). Like seeding.ts these
+// reproduce bytes the program validates (`MatchCommitment.expected_feed_hash`
+// in bind_match_feed) — protocol surface, not a service client.
+export {
+  buildDotaWinnerJobs,
+  buildDotaWinnerUrl,
+  computeDotaFeedHash,
+} from "./oracle/dotaFeedJob";
 export type {
-  GetMatchesOptions,
-  GetParticipantsOptions,
-  GetPayoutsOptions,
-  IndexerClientOptions,
-  IndexerMatch,
-  IndexerMatchStatus,
-  IndexerParticipant,
-  IndexerPayout,
-  IndexerPayoutKind,
-  IndexerPayoutPreset,
-  IndexerProposalSource,
-  IndexerSettlementMode,
-  IndexerTournament,
-  IndexerTournamentStatus,
-  ListTournamentsOptions,
-} from "./api";
+  DotaFeedJobParams,
+  DotaWinnerSource,
+} from "./oracle/dotaFeedJob";
+
+// NOTE (2026-06-07): the indexer REST client (`BracketChainIndexerClient` +
+// `Indexer*` types) moved OUT of the SDK into the frontend
+// (`BracketChain-Frontend/lib/indexerClient.ts`). Layering rule: this SDK is
+// PROTOCOL-ONLY — everything exported here must work against a bare Solana
+// RPC node. Clients for services WE operate (indexer REST, oracle endpoints)
+// are platform concerns and live with their consumers. Deterministic
+// protocol artifacts (seeding.ts, oracle/dotaFeedJob.ts) stay here: they
+// reproduce bytes the PROGRAM validates, regardless of who runs the servers.
 
 // Errors — base class + every typed subclass + the mapError helper
 export {

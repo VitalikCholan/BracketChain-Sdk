@@ -1,4 +1,9 @@
-import { type Address, type Signature } from "@solana/kit";
+import {
+  type Address,
+  type AddressesByLookupTableAddress,
+  type Instruction,
+  type Signature,
+} from "@solana/kit";
 
 import type { BracketChainClient } from "../client";
 import { getProposeResultOracleInstructionAsync } from "../generated";
@@ -15,6 +20,26 @@ export interface ProposeResultOracleParams {
   bracket?: number;
   /** Switchboard On-Demand feed account bound to this match. */
   switchboardFeed: Address;
+  /**
+   * Instructions to run **before** `propose_result_oracle` in the SAME
+   * transaction. The relayer cron bundles Switchboard's feed-update (crank)
+   * instructions here so the freshly-landed oracle value is read in the slot
+   * it lands — the same "same-slot" pattern as `revealSeed`. Without an
+   * update in-tx, the read must beat `max_stale_slots` on its own.
+   */
+  preInstructions?: Instruction[];
+  /**
+   * Address-lookup tables for the bundled pre-instructions (Switchboard's
+   * `fetchUpdateIx` returns them) — required to fit the update + propose
+   * combo under the packet-size limit.
+   */
+  lookupTables?: AddressesByLookupTableAddress;
+  /**
+   * Explicit compute-unit limit. The bundled feed update (secp256k1 oracle
+   * signature verification) far exceeds the 200k default that would
+   * otherwise apply; the relayer passes a generous limit.
+   */
+  computeUnits?: number;
 }
 
 export interface ProposeResultOracleResult {
@@ -49,6 +74,14 @@ export async function proposeResultOracle(
     switchboardFeed: params.switchboardFeed,
   });
 
-  const txSignature = await sendInstructions(client, signer, [ix]);
+  const txSignature = await sendInstructions(
+    client,
+    signer,
+    [...(params.preInstructions ?? []), ix],
+    {
+      computeUnits: params.computeUnits,
+      lookupTables: params.lookupTables,
+    },
+  );
   return { txSignature };
 }
