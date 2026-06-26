@@ -63,16 +63,12 @@ import {
   getSettlementModeEncoder,
   getSupportedGameDecoder,
   getSupportedGameEncoder,
-  getTournamentFormatDecoder,
-  getTournamentFormatEncoder,
   type PayoutPreset,
   type PayoutPresetArgs,
   type SettlementMode,
   type SettlementModeArgs,
   type SupportedGame,
   type SupportedGameArgs,
-  type TournamentFormat,
-  type TournamentFormatArgs,
 } from "../types";
 
 export const CREATE_TOURNAMENT_DISCRIMINATOR: ReadonlyUint8Array =
@@ -146,7 +142,6 @@ export type CreateTournamentInstructionData = {
   game: SupportedGame;
   settlementMode: SettlementMode;
   disputeWindowSecs: number;
-  format: TournamentFormat;
 };
 
 export type CreateTournamentInstructionDataArgs = {
@@ -159,7 +154,6 @@ export type CreateTournamentInstructionDataArgs = {
   game: SupportedGameArgs;
   settlementMode: SettlementModeArgs;
   disputeWindowSecs: number;
-  format: TournamentFormatArgs;
 };
 
 export function getCreateTournamentInstructionDataEncoder(): Encoder<CreateTournamentInstructionDataArgs> {
@@ -175,7 +169,6 @@ export function getCreateTournamentInstructionDataEncoder(): Encoder<CreateTourn
       ["game", getSupportedGameEncoder()],
       ["settlementMode", getSettlementModeEncoder()],
       ["disputeWindowSecs", getU32Encoder()],
-      ["format", getTournamentFormatEncoder()],
     ]),
     (value) => ({ ...value, discriminator: CREATE_TOURNAMENT_DISCRIMINATOR }),
   );
@@ -193,7 +186,6 @@ export function getCreateTournamentInstructionDataDecoder(): Decoder<CreateTourn
     ["game", getSupportedGameDecoder()],
     ["settlementMode", getSettlementModeDecoder()],
     ["disputeWindowSecs", getU32Decoder()],
-    ["format", getTournamentFormatDecoder()],
   ]);
 }
 
@@ -255,7 +247,6 @@ export type CreateTournamentAsyncInput<
   game: CreateTournamentInstructionDataArgs["game"];
   settlementMode: CreateTournamentInstructionDataArgs["settlementMode"];
   disputeWindowSecs: CreateTournamentInstructionDataArgs["disputeWindowSecs"];
-  format: CreateTournamentInstructionDataArgs["format"];
 };
 
 export async function getCreateTournamentInstructionAsync<
@@ -436,7 +427,6 @@ export type CreateTournamentInput<
   game: CreateTournamentInstructionDataArgs["game"];
   settlementMode: CreateTournamentInstructionDataArgs["settlementMode"];
   disputeWindowSecs: CreateTournamentInstructionDataArgs["disputeWindowSecs"];
-  format: CreateTournamentInstructionDataArgs["format"];
 };
 
 export function getCreateTournamentInstruction<

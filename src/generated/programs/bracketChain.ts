@@ -21,6 +21,7 @@ import {
   type ClientWithRpc,
   type ClientWithTransactionPlanning,
   type ClientWithTransactionSending,
+  type ExtendedClient,
   type GetAccountInfoApi,
   type GetMultipleAccountsApi,
   type Instruction,
@@ -157,7 +158,7 @@ import {
 } from "../pdas";
 
 export const BRACKET_CHAIN_PROGRAM_ADDRESS =
-  "EF19YVUerm5QW1CsZeqiPDAFFtaXgdt6WuYBGeiz9Q1z" as Address<"EF19YVUerm5QW1CsZeqiPDAFFtaXgdt6WuYBGeiz9Q1z">;
+  "BeTbkzJ5MPiZP9PZ2xnhsjXCyBxVasuZJwuLQEpGiovw" as Address<"BeTbkzJ5MPiZP9PZ2xnhsjXCyBxVasuZJwuLQEpGiovw">;
 
 export enum BracketChainAccount {
   MatchNode,
@@ -534,7 +535,7 @@ export function identifyBracketChainInstruction(
 }
 
 export type ParsedBracketChainInstruction<
-  TProgram extends string = "EF19YVUerm5QW1CsZeqiPDAFFtaXgdt6WuYBGeiz9Q1z",
+  TProgram extends string = "BeTbkzJ5MPiZP9PZ2xnhsjXCyBxVasuZJwuLQEpGiovw",
 > =
   | ({
       instructionType: BracketChainInstruction.BindMatchFeed;
@@ -807,6 +808,9 @@ export type BracketChainPlugin = {
   accounts: BracketChainPluginAccounts;
   instructions: BracketChainPluginInstructions;
   pdas: BracketChainPluginPdas;
+  identifyAccount: typeof identifyBracketChainAccount;
+  identifyInstruction: typeof identifyBracketChainInstruction;
+  parseInstruction: typeof parseBracketChainInstruction;
 };
 
 export type BracketChainPluginAccounts = {
@@ -938,7 +942,7 @@ export type BracketChainPluginRequirements = ClientWithRpc<
 export function bracketChainProgram() {
   return <T extends BracketChainPluginRequirements>(
     client: T,
-  ): Omit<T, "bracketChain"> & { bracketChain: BracketChainPlugin } => {
+  ): ExtendedClient<T, { bracketChain: BracketChainPlugin }> => {
     return extendClient(client, {
       bracketChain: <BracketChainPlugin>{
         accounts: {
@@ -1092,6 +1096,9 @@ export function bracketChainProgram() {
           tournament: findTournamentPda,
           participant: findParticipantPda,
         },
+        identifyAccount: identifyBracketChainAccount,
+        identifyInstruction: identifyBracketChainInstruction,
+        parseInstruction: parseBracketChainInstruction,
       },
     });
   };

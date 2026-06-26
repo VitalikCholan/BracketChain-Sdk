@@ -147,6 +147,15 @@ export type {
   DotaFeedJobParams,
   DotaWinnerSource,
 } from "./oracle/dotaFeedJob";
+export {
+  buildCs2WinnerJobs,
+  buildCs2WinnerUrl,
+  computeCs2FeedHash,
+} from "./oracle/cs2FeedJob";
+export type {
+  Cs2FeedJobParams,
+  Cs2WinnerSource,
+} from "./oracle/cs2FeedJob";
 
 // NOTE (2026-06-07): the indexer REST client (`BracketChainIndexerClient` +
 // `Indexer*` types) moved OUT of the SDK into the frontend

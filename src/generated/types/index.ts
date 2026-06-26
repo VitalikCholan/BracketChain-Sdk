@@ -14,5 +14,4 @@ export * from "./placementPayout";
 export * from "./proposalSource";
 export * from "./settlementMode";
 export * from "./supportedGame";
-export * from "./tournamentFormat";
 export * from "./tournamentStatus";

@@ -68,6 +68,10 @@ const DEFAULT_SAS_SCHEMA_DOTA2 = address(
   "4TT2a5ycymMRwZJoGTPfaggb7CtGrDtCXKheF7zeV27m",
 );
 
+// SAS Schema PDA for the CS2 game-identity shape. No devnet default yet — pass
+// --schema-cs2=<pubkey> (or SAS_SCHEMA_CS2 env) once the CS2 schema is created.
+// Falls back to the zero sentinel, leaving CS2 joins gated until configured.
+
 // Zero pubkey sentinel for SupportedGame slots without a schema yet
 // (Manual needs none; Cs2Faceit / Valorant / LoL ship post-Phase-1).
 const ZERO_ADDRESS = address("11111111111111111111111111111111");
@@ -83,6 +87,7 @@ interface Cli {
   funderKeypair: string;
   credential: Address;
   schemaDota2: Address;
+  schemaCs2: Address;
   checkOnly: boolean;
 }
 
@@ -95,6 +100,7 @@ function parseCli(): Cli {
 
   const credentialArg = get("credential");
   const schemaArg = get("schema-dota2");
+  const schemaCs2Arg = get("schema-cs2") ?? process.env.SAS_SCHEMA_CS2;
 
   return {
     rpc: get("rpc") ?? "https://api.devnet.solana.com",
@@ -104,6 +110,7 @@ function parseCli(): Cli {
       path.join(os.homedir(), ".config", "solana", "id.json"),
     credential: credentialArg ? address(credentialArg) : DEFAULT_SAS_CREDENTIAL,
     schemaDota2: schemaArg ? address(schemaArg) : DEFAULT_SAS_SCHEMA_DOTA2,
+    schemaCs2: schemaCs2Arg ? address(schemaCs2Arg) : ZERO_ADDRESS,
     checkOnly: args.includes("--check"),
   };
 }
@@ -145,7 +152,7 @@ async function main(): Promise<void> {
   const sasSchemas: Address[] = [
     ZERO_ADDRESS, // Manual — no identity required
     cli.schemaDota2, // Dota2
-    ZERO_ADDRESS, // Cs2Faceit — V1.3+
+    cli.schemaCs2, // Cs2Faceit — set via --schema-cs2 / SAS_SCHEMA_CS2
     ZERO_ADDRESS, // Valorant — V1.3+
     ZERO_ADDRESS, // LoL — V1.3+
   ];
@@ -158,6 +165,7 @@ async function main(): Promise<void> {
   console.log(`  rpc:            ${cli.rpc}`);
   console.log(`  sas_credential: ${cli.credential}  (desired)`);
   console.log(`  schema[Dota2]:  ${cli.schemaDota2}  (desired)`);
+  console.log(`  schema[Cs2]:    ${cli.schemaCs2}  (desired)`);
 
   // ── Fetch existing config ──────────────────────────────────────────────────
   const [protocolConfigPda] = await findProtocolConfigPda();
@@ -175,6 +183,7 @@ async function main(): Promise<void> {
   console.log(`\n  on-chain authority:      ${cfg.authority}`);
   console.log(`  on-chain sas_credential: ${cfg.sasCredential}`);
   console.log(`  on-chain schema[Dota2]:  ${cfg.sasSchemas[1]}`);
+  console.log(`  on-chain schema[Cs2]:    ${cfg.sasSchemas[2]}`);
 
   const alreadyMatches =
     cfg.sasCredential === cli.credential &&
@@ -253,6 +262,7 @@ async function main(): Promise<void> {
   if (verified.exists) {
     console.log(`   sas_credential: ${verified.data.sasCredential}`);
     console.log(`   schema[Dota2]:  ${verified.data.sasSchemas[1]}`);
+    console.log(`   schema[Cs2]:    ${verified.data.sasSchemas[2]}`);
   }
 }
 
