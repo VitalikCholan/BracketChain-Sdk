@@ -31,7 +31,6 @@ import {
   PayoutPreset,
   SettlementMode,
   SupportedGame,
-  TournamentFormat,
 } from "../generated";
 import { assertSigner, sendInstructions } from "./_send";
 
@@ -103,13 +102,6 @@ export interface CreateTournamentConfig {
    * to 1 hour. Ignored by `OrganizerOnly` tournaments.
    */
   disputeWindowSecs?: number;
-  /**
-   * Bracket topology (R15 schema-prep). Defaults to
-   * `TournamentFormat.SingleElim` — the only format V1 accepts; the others are
-   * reserved on-chain and rejected with `FormatNotYetSupported` until formats
-   * Phases A-C ship.
-   */
-  format?: TournamentFormat;
 }
 
 export interface CreateTournamentResult {
@@ -256,7 +248,6 @@ export async function createTournament(
     game: config.game ?? SupportedGame.Manual,
     settlementMode: config.settlementMode ?? SettlementMode.OrganizerOnly,
     disputeWindowSecs: config.disputeWindowSecs ?? DEFAULT_DISPUTE_WINDOW_SECS,
-    format: config.format ?? TournamentFormat.SingleElim,
   });
 
   try {
