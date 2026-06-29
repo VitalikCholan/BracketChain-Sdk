@@ -1,6 +1,6 @@
 {
   "name": "@bracketchain/sdk",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "TypeScript SDK for the BracketChain on-chain tournament protocol on Solana — PDA-escrowed USDC tournaments with auto prize distribution.",
   "license": "MIT",
   "repository": {
@@ -35,7 +35,7 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test",
+    "test": "node --import tsx --experimental-test-module-mocks --test",
     "prepublishOnly": "pnpm build"
   },
   "devDependencies": {

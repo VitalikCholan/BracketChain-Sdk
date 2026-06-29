@@ -84,6 +84,7 @@ export {
   setOracleConfig,
   settleFinal,
   startTournament,
+  buildStartTournamentTransactions,
   subscribe,
 } from "./methods";
 export type {
@@ -129,6 +130,7 @@ export type {
   SettleFinalResult,
   StartTournamentParams,
   StartTournamentResult,
+  BuiltStartTransactions,
   SubscribeOptions,
   SubscriptionError,
   TournamentSubscriptionEvent,

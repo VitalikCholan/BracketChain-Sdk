@@ -1,10 +1,19 @@
 import {
   AccountRole,
+  appendTransactionMessageInstructions,
+  compileTransaction,
+  createTransactionMessage,
+  pipe,
+  setTransactionMessageFeePayer,
+  setTransactionMessageLifetimeUsingBlockhash,
   type AccountMeta,
   type Address,
   type Instruction,
   type Signature,
+  type Transaction,
+  type TransactionSigner,
 } from "@solana/kit";
+import { getSetComputeUnitLimitInstruction } from "@solana-program/compute-budget";
 
 import type { BracketChainClient } from "../client";
 import {
@@ -58,23 +67,49 @@ export interface StartTournamentResult {
   totalMatches: number;
 }
 
+/** Compiled (unsigned) bracket-init transactions for the one-approval flow. */
+export interface BuiltStartTransactions {
+  /**
+   * Kit-compiled v0 transactions — UNSIGNED, with fee payer (organizer),
+   * a shared recent blockhash, and a SetComputeUnitLimit instruction. Hand
+   * these to a batch-signing wallet API (e.g. Privy's variadic
+   * `signAndSendTransaction(...inputs)`) to start the tournament in a single
+   * approval. The on-chain handler is order-independent, so they may be sent
+   * in any order.
+   */
+  transactions: Transaction[];
+  bracketSize: number;
+  totalMatches: number;
+}
+
+interface PreparedStartChunks {
+  signer: TransactionSigner;
+  /** One `start_tournament` instruction (with its remaining accounts) per chunk. */
+  chunks: Instruction[];
+  bracketSize: number;
+  totalMatches: number;
+  computeUnits: number;
+}
+
 /**
- * Initialize the bracket and transition Registration → Active.
+ * Shared prep for both start paths: validate, resolve participants, build the
+ * full single-elim descriptor list, and chunk it into one `start_tournament`
+ * instruction per transaction. Pure construction — no signing or sending.
  *
  * Lifecycle (mirrors on-chain `start_tournament`):
- *  1. First chunk: program captures `seed_hash` from the SlotHashes sysvar,
- *     computes bracket_size = next_pow_of_2(participant_count), flips status
+ *  1. First chunk to land: program captures `seed_hash`, computes
+ *     bracket_size = next_pow_of_2(participant_count), flips status
  *     Registration → PendingBracketInit, then inits its descriptors.
- *  2. Subsequent chunks: status is PendingBracketInit. Program inits more
- *     match PDAs.
- *  3. Last chunk fills the final descriptor → status flips to Active.
+ *  2. Other chunks: status is PendingBracketInit. Program inits more match PDAs.
+ *  3. The chunk filling the final descriptor flips status to Active.
  *
- * Each chunk runs with a 400K compute-unit budget by default.
+ * Each chunk is validated standalone on-chain (seed permutation + PDA
+ * derivation; idempotency via create_account), so chunk ORDER does not matter.
  */
-export async function startTournament(
+async function prepareStartChunks(
   client: BracketChainClient,
   params: StartTournamentParams,
-): Promise<StartTournamentResult> {
+): Promise<PreparedStartChunks> {
   const signer = assertSigner(client, "startTournament");
   const organizer = signer.address;
   const tournamentPda = params.tournamentPda;
@@ -129,12 +164,12 @@ export async function startTournament(
   const remainingPdas = matchPdas.slice(alreadyInit);
   const remainingParticipants = participantsPerDescriptor.slice(alreadyInit);
 
-  // ── chunk + send sequentially ─────────────────────────────────────────────
+  // ── chunk ──────────────────────────────────────────────────────────────────
   // VRF chunks carry a Participant tail, so they default smaller.
   const defaultChunk = vrfMode ? VRF_CHUNK_SIZE : DEFAULT_CHUNK_SIZE;
   const chunkSize = Math.max(1, Math.min(params.chunkSize ?? defaultChunk, 12));
   const computeUnits = params.computeUnits ?? DEFAULT_COMPUTE_UNITS;
-  const txSignatures: Signature[] = [];
+  const chunks: Instruction[] = [];
 
   for (let i = 0; i < remainingDescriptors.length; i += chunkSize) {
     const dChunk = remainingDescriptors.slice(i, i + chunkSize);
@@ -154,22 +189,81 @@ export async function startTournament(
       descriptors: dChunk,
     });
 
-    const ixWithRemaining: Instruction = {
+    chunks.push({
       ...ix,
       accounts: [...(ix.accounts ?? []), ...remainingAccounts],
-    };
-
-    const sig = await sendInstructions(client, signer, [ixWithRemaining], {
-      computeUnits,
     });
-    txSignatures.push(sig);
   }
 
   return {
-    txSignatures,
+    signer,
+    chunks,
     bracketSize,
     totalMatches: bracketSize - 1,
+    computeUnits,
   };
+}
+
+/**
+ * Initialize the bracket and transition Registration → Active by signing and
+ * sending one transaction per chunk SEQUENTIALLY.
+ *
+ * This is the fallback path. Prefer {@link buildStartTournamentTransactions} +
+ * a batch-signing wallet for a single-approval start; fall back to this when
+ * the wallet can't batch (or to drive the flow from a Node script). Each chunk
+ * runs with a 400K compute-unit budget by default.
+ */
+export async function startTournament(
+  client: BracketChainClient,
+  params: StartTournamentParams,
+): Promise<StartTournamentResult> {
+  const { signer, chunks, bracketSize, totalMatches, computeUnits } =
+    await prepareStartChunks(client, params);
+
+  const txSignatures: Signature[] = [];
+  for (const ix of chunks) {
+    txSignatures.push(
+      await sendInstructions(client, signer, [ix], { computeUnits }),
+    );
+  }
+
+  return { txSignatures, bracketSize, totalMatches };
+}
+
+/**
+ * Build the bracket-init transactions WITHOUT signing or sending them, so a
+ * caller can sign+send them all in a single wallet approval (e.g. Privy's
+ * variadic `signAndSendTransaction(...inputs)`).
+ *
+ * Returns one compiled, unsigned v0 transaction per chunk — each with the
+ * organizer as fee payer, a shared recent blockhash, and a SetComputeUnitLimit
+ * instruction. Because the on-chain handler validates every chunk standalone
+ * and idempotently, the transactions may be submitted in any order.
+ */
+export async function buildStartTournamentTransactions(
+  client: BracketChainClient,
+  params: StartTournamentParams,
+): Promise<BuiltStartTransactions> {
+  const { signer, chunks, bracketSize, totalMatches, computeUnits } =
+    await prepareStartChunks(client, params);
+
+  const { value: latestBlockhash } = await client.rpc
+    .getLatestBlockhash({ commitment: client.commitment })
+    .send();
+
+  const cuIx = getSetComputeUnitLimitInstruction({ units: computeUnits });
+  const transactions = chunks.map((ix) =>
+    compileTransaction(
+      pipe(
+        createTransactionMessage({ version: 0 }),
+        (m) => setTransactionMessageFeePayer(signer.address, m),
+        (m) => setTransactionMessageLifetimeUsingBlockhash(latestBlockhash, m),
+        (m) => appendTransactionMessageInstructions([cuIx, ix], m),
+      ),
+    ),
+  );
+
+  return { transactions, bracketSize, totalMatches };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

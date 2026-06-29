@@ -47,10 +47,11 @@ export type {
   PartialRefundChunkResult,
 } from "./partialRefundChunk";
 
-export { startTournament } from "./startTournament";
+export { startTournament, buildStartTournamentTransactions } from "./startTournament";
 export type {
   StartTournamentParams,
   StartTournamentResult,
+  BuiltStartTransactions,
 } from "./startTournament";
 
 export { reportResult } from "./reportResult";
